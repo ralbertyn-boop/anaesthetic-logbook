@@ -1,5 +1,5 @@
 // Offline cache for the Anaesthetic Logbook. Bump VERSION when you change any file.
-const VERSION = "logbook-v5";
+const VERSION = "logbook-v6";
 const CORE = ["./", "./index.html", "./manifest.webmanifest", "./icons/icon-192.png", "./icons/icon-512.png", "./icons/icon-180.png", "./vendor/jspdf.umd.min.js", "./vendor/jspdf.plugin.autotable.min.js"];
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(VERSION).then(c => c.addAll(CORE)).then(() => self.skipWaiting()));
