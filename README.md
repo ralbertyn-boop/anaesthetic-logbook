@@ -19,3 +19,6 @@ An offline, installable (PWA) anaesthetic case logbook structured to the Royal C
 Independent tool, not an RCoA product. Record anonymised case details only. Back up regularly: deleting the app or clearing site data erases your entries.
 
 When changing files, bump `VERSION` in `sw.js` so installed copies pick up the update.
+
+## Third-party libraries
+PDF export uses [jsPDF](https://github.com/parallax/jsPDF) 2.5.2 and [jsPDF-AutoTable](https://github.com/simonbengtsson/jsPDF-AutoTable) 3.8.4 (both MIT licence), bundled in `vendor/` so PDFs work offline.

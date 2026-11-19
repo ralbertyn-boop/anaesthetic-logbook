@@ -313,8 +313,8 @@ async function initStore(){
   setStorageLabel();render();
 }
 async function localDownload({filename,data}){
-  const type=/\.csv$/.test(filename)?"text/csv":/\.json$/.test(filename)?"application/json":"text/html";
-  const blob=new Blob([data],{type});
+  const type=/\.csv$/.test(filename)?"text/csv":/\.json$/.test(filename)?"application/json":/\.pdf$/.test(filename)?"application/pdf":"text/html";
+  const blob=data instanceof Blob?data:new Blob([data],{type});
   const mobile=/iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
   if(mobile&&navigator.canShare){try{const file=new File([blob],filename,{type});if(navigator.canShare({files:[file]})){await navigator.share({files:[file],title:filename});return}}catch(e){if(e&&e.name==="AbortError")throw e}}
   const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=filename;document.body.appendChild(a);a.click();
@@ -483,7 +483,7 @@ function viewCases(){
   <div class="toolbar">
     <input type="search" id="fq" placeholder="Search operation, hospital, supervisor, technique, notes…" value="${esc(F.q)}">
     <select id="fs"><option value="">All specialties</option>${SPECIALTIES.map(s=>`<option ${F.spec===s?"selected":""}>${s}</option>`).join("")}</select>
-    <input type="date" id="ff" value="${F.from}" title="From"><input type="date" id="ft" value="${F.to}" title="To">
+    <input type="date" id="ff" value="${F.from}" title="From"><input type="date" id="ft" value="${F.to}" title="To">${S.downloads&&list.length?`<button class="btn sm" id="cpdf" title="PDF of the cases shown">${PDF_ICON}PDF</button>`:""}
   </div>
   ${!list.length?`<div class="card empty">${S.cases.length?"No cases match these filters.":"No cases yet."}</div>`:`
   <div class="card listtable" style="padding:6px 8px"><table><thead><tr><th>Date</th><th>Specialty / operation</th><th>Age</th><th>Supervision</th><th>Technique</th></tr></thead><tbody>
@@ -496,6 +496,7 @@ function bindCases(){
   const upd=()=>{F.q=$("#fq").value;F.spec=$("#fs").value;F.from=$("#ff").value;F.to=$("#ft").value;F.n=60;const pos=$("#fq").selectionStart;render();const q=$("#fq");q.focus();try{q.setSelectionRange(pos,pos)}catch(e){}};
   $("#fq").oninput=upd;["#fs","#ff","#ft"].forEach(s=>$(s).onchange=upd);
   if($("#more"))$("#more").onclick=()=>{F.n+=100;render()};
+  if($("#cpdf"))$("#cpdf").onclick=e=>{const filt=F.q||F.spec||F.from||F.to;const label=filt?[F.spec,F.q?`“${F.q}”`:"",(F.from||F.to)?`${F.from?fmtDate(F.from):"start"} to ${F.to?fmtDate(F.to):"present"}`:""].filter(Boolean).join(" · "):"All cases";runPdf(e.currentTarget,()=>pdfCaseLog(filtered(),label),`case-log-${todayISO()}.pdf`)};
   document.querySelectorAll("[data-id]").forEach(el=>el.onclick=()=>showCase(S.cases.find(c=>c.id===el.dataset.id)));
 }
 function showCase(c){
@@ -668,7 +669,7 @@ function viewReport(){
   return `<h1>ARCP summary</h1><p class="sub">Laid out in the RCoA's recommended Logbook Summary Data Set format for the 2021 curriculum.</p>
   <div class="toolbar"><label class="f" style="flex-direction:row;align-items:center;gap:6px"><span class="lt">From </span><input type="date" id="rf" value="${R.from}"></label><label class="f" style="flex-direction:row;align-items:center;gap:6px"><span class="lt">To </span><input type="date" id="rt" value="${R.to}"></label>
   <button class="btn sm" id="rty">This training year</button><button class="btn sm" id="r12">Last 12 months</button><button class="btn sm" id="rall">All</button>
-  <span style="flex:1"></span>${S.downloads?`<button class="btn sm primary" id="rdl">Download report</button>`:""}<button class="btn sm" id="rcp">Copy table</button></div>
+  <span style="flex:1"></span>${S.downloads?`<button class="btn sm primary" id="rpdf">${PDF_ICON}PDF</button><button class="btn sm" id="rdl">HTML</button>`:""}<button class="btn sm" id="rcp">Copy table</button></div>
   <div class="card">${reportHTML()}</div>`;
 }
 function bindReport(){
@@ -677,6 +678,7 @@ function bindReport(){
   $("#rty").onclick=()=>{R.from=`${ty}-08-01`;R.to="";render()};
   $("#r12").onclick=()=>{const d=new Date(now);d.setFullYear(d.getFullYear()-1);R.from=d.toISOString().slice(0,10);R.to="";render()};
   $("#rall").onclick=()=>{R.from="";R.to="";render()};
+  if($("#rpdf"))$("#rpdf").onclick=e=>runPdf(e.currentTarget,()=>pdfSummary(R.from,R.to),`logbook-summary-${todayISO()}.pdf`);
   if($("#rdl"))$("#rdl").onclick=async()=>{
     const css=`body{font:13px/1.4 Arial,sans-serif;color:#111;margin:24px}table{border-collapse:collapse;margin-bottom:8px}th,td{border:1px solid #999;padding:4px 7px}th{background:#eee}td.n{text-align:right}tr.tot td{font-weight:bold;background:#f3f3f3}.muted{color:#666}h2{font-size:15px;margin:20px 0 6px}`;
     const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Logbook summary</title><style>${css}</style></head><body><h1 style="font-size:18px">Anaesthetic logbook summary</h1>${reportHTML()}</body></html>`;
@@ -690,6 +692,99 @@ function bindReport(){
     try{await navigator.clipboard.writeText(lines.join("\n"));toast("Summary table copied — paste into Excel or Word")}catch(e){toast("Copy isn't available here")}
   };
 }
+
+/* ---- PDF export ---- */
+let pdfLibP=null;
+function loadScript(src){return new Promise((res,rej)=>{const el=document.createElement("script");el.src=src;el.onload=res;el.onerror=()=>rej(new Error(src));document.head.appendChild(el)})}
+function loadPdf(){if(window.jspdf&&window.jspdf.jsPDF&&window.jspdf.jsPDF.API.autoTable)return Promise.resolve();if(!pdfLibP)pdfLibP=loadScript("vendor/jspdf.umd.min.js").then(()=>loadScript("vendor/jspdf.plugin.autotable.min.js")).catch(e=>{pdfLibP=null;throw e});return pdfLibP}
+const PDF_TEAL=[14,124,107], PDF_INK=[19,40,35], PDF_MUTED=[110,128,122];
+function pdfStart(title,periodText){
+  const doc=new window.jspdf.jsPDF({orientation:"landscape",unit:"mm",format:"a4"});
+  doc.setFillColor(...PDF_TEAL);doc.rect(0,0,297,4,"F");
+  doc.setFont("helvetica","bold");doc.setFontSize(17);doc.setTextColor(...PDF_INK);doc.text(title,14,16);
+  doc.setFont("helvetica","normal");doc.setFontSize(10);doc.setTextColor(...PDF_MUTED);
+  const who=(S.settings.ownerName||"").trim();
+  doc.text([who?who:null,periodText].filter(Boolean).join("   ·   "),14,23);
+  return {doc,y:30};
+}
+function pdfFinish(doc){
+  const n=doc.getNumberOfPages(), gen="Generated "+fmtDate(todayISO());
+  for(let i=1;i<=n;i++){doc.setPage(i);doc.setFontSize(8);doc.setTextColor(...PDF_MUTED);doc.setFont("helvetica","normal");
+    doc.text("Anaesthetic Logbook · independent tool, not an official RCoA document · "+gen,14,203);
+    doc.text(`Page ${i} of ${n}`,283,203,{align:"right"});}
+}
+function pdfTableOpts(extra){
+  return Object.assign({theme:"grid",margin:{left:14,right:14,bottom:14},
+    styles:{font:"helvetica",fontSize:8.5,cellPadding:1.8,lineColor:[217,227,223],lineWidth:.2,textColor:PDF_INK,valign:"middle"},
+    headStyles:{fillColor:PDF_TEAL,textColor:255,fontStyle:"bold",halign:"center"},
+    footStyles:{fillColor:[226,243,238],textColor:[10,92,80],fontStyle:"bold"},
+    alternateRowStyles:{fillColor:[247,250,249]}},extra||{});
+}
+function pdfSection(doc,y,title,need){
+  if(y+(need||30)>190){doc.addPage();y=16}
+  doc.setFont("helvetica","bold");doc.setFontSize(11.5);doc.setTextColor(...PDF_INK);doc.text(title,14,y);return y+3;
+}
+const nz=n=>n?String(n):"";
+async function pdfSummary(from,to){
+  await loadPdf();
+  const inR=x=>(!from||x.date>=from)&&(!to||x.date<=to);
+  const cases=S.cases.filter(inR),sessions=S.sessions.filter(inR);
+  const period=`Period: ${from?fmtDate(from):"all records"} to ${to?fmtDate(to):"present"}  ·  ${cases.length} case${cases.length===1?"":"s"}`;
+  const {doc}=pdfStart("Logbook summary",period); let y=30;
+  const num={halign:"right"};
+  y=pdfSection(doc,y,"Cases by specialty, supervision and age");
+  const body=SPECIALTIES.map(sp=>{const sub=cases.filter(c=>c.specialty===sp);return [sp,nz(sub.length),...SUPERVISION.map(sv=>nz(sub.filter(c=>c.supervision===sv).length)),...AGE_BANDS.map(a=>nz(sub.filter(c=>ageBand(c)===a).length))]});
+  const foot=[["TOTALS",cases.length,...SUPERVISION.map(sv=>cases.filter(c=>c.supervision===sv).length),...AGE_BANDS.map(a=>cases.filter(c=>ageBand(c)===a).length)].map((v,i)=>i?{content:String(v),styles:{halign:"right"}}:String(v))];
+  const cs={0:{cellWidth:46,halign:"left"}};for(let i=1;i<11;i++)cs[i]=num;
+  doc.autoTable(pdfTableOpts({startY:y,head:[[{content:"Specialty",rowSpan:2},{content:"Total cases",rowSpan:2},{content:"Actual Level of Supervision",colSpan:4},{content:"Age of Patient (Years)",colSpan:5}],[...SUPERVISION,"<1 yr","1-4","5-9","10-17","Adult"]],body,foot,columnStyles:cs,showFoot:"lastPage",styles:{font:"helvetica",fontSize:8,cellPadding:1.1,lineColor:[217,227,223],lineWidth:.2,textColor:PDF_INK,valign:"middle"}}));
+  y=doc.lastAutoTable.finalY+10;
+  const sc=count(sessions,x=>x.type);
+  y=pdfSection(doc,y,"Sessions",30);
+  doc.autoTable(pdfTableOpts({startY:y,tableWidth:120,head:[["Session type","Number"]],body:SESSION_TYPES.map(t=>["Number of "+t+" sessions",String(sc[t]||0)]),columnStyles:{1:num}}));
+  y=doc.lastAutoTable.finalY+10;
+  const cross=(title,rows,fn)=>{
+    y=pdfSection(doc,y,title+" and Actual Level of Supervision",14+rows.length*7);
+    doc.autoTable(pdfTableOpts({startY:y,tableWidth:200,head:[["",...SUPERVISION,"Total"]],
+      body:rows.map(r=>{const sub=cases.filter(c=>fn(c)===r);return [r,...SUPERVISION.map(sv=>nz(sub.filter(c=>c.supervision===sv).length)),nz(sub.length)]}),
+      columnStyles:{0:{cellWidth:40},1:num,2:num,3:num,4:num,5:{halign:"right",fontStyle:"bold"}}}));
+    y=doc.lastAutoTable.finalY+10;
+  };
+  cross("ASA Grade",ASA,c=>c.asa);cross("Age Group",AGE_BANDS,ageBand);cross("Time of Day",TIME_BANDS,c=>timeBand(c.start));cross("Priority",PRIORITY,c=>c.priority);
+  const modeRows=(opts,fn,otherFn)=>{const o=count(cases,fn);const others=[...new Set(cases.map(otherFn).filter(Boolean))];return opts.map(k=>[k+(k==="Other"&&others.length?` (${others.join("; ")})`:""),nz(o[k])])};
+  y=pdfSection(doc,y,"Mode of Anaesthesia",60);
+  const mopts={tableWidth:200,columnStyles:{0:{cellWidth:160},1:num}};
+  doc.autoTable(pdfTableOpts({...mopts,startY:y,head:[["Primary mode","Number of cases"]],body:modeRows(PRIMARY,c=>c.primary,c=>c.primary==="Other"?c.primaryOther:null)}));
+  y=doc.lastAutoTable.finalY+6;
+  doc.autoTable(pdfTableOpts({...mopts,startY:y,head:[["Secondary mode / regional techniques","Number of cases"]],body:modeRows(REGIONAL,c=>c.regional||[],c=>(c.regional||[]).includes("Other")?c.regionalOther:null)}));
+  y=doc.lastAutoTable.finalY+6;
+  doc.autoTable(pdfTableOpts({...mopts,startY:y,head:[["Additional procedures","Number of cases"]],body:modeRows(PROCEDURES,c=>c.procedures||[],c=>(c.procedures||[]).includes("Other")?c.proceduresOther:null)}));
+  const noTime=cases.filter(c=>!c.start).length;
+  if(noTime){y=doc.lastAutoTable.finalY+6;if(y>195){doc.addPage();y=16}doc.setFontSize(8.5);doc.setTextColor(...PDF_MUTED);doc.text(`${noTime} case(s) have no start time and are not counted in the time-of-day table.`,14,y)}
+  pdfFinish(doc);
+  return doc.output("blob");
+}
+async function pdfCaseLog(list,label){
+  await loadPdf();
+  list=[...list].sort((a,b)=>(a.date+(a.start||"")).localeCompare(b.date+(b.start||"")));
+  const {doc}=pdfStart("Case log",`${label}  ·  ${list.length} case${list.length===1?"":"s"}`);
+  const other=(arr,o)=>(arr||[]).map(r=>r==="Other"&&o?"Other: "+o:r).join(", ");
+  doc.autoTable(pdfTableOpts({startY:30,
+    styles:{font:"helvetica",fontSize:7.2,cellPadding:1.4,lineColor:[217,227,223],lineWidth:.2,textColor:PDF_INK,valign:"top",overflow:"linebreak"},
+    head:[["#","Date","Time","Hospital","Specialty","Operation","Age","ASA","Priority","Supervision","Supervisor","Primary mode","Regional","Procedures","Incidents"]],
+    body:list.map((c,i)=>[String(i+1),fmtDate(c.date),(c.start||"")+(c.end?"–"+c.end:""),c.hospital||"",c.specialty||"",c.operation||"",ageText(c),(c.asa||"")+(c.asaE?"E":""),c.priority||"",c.supervision||"",c.supervisor||"",
+      c.primary==="Other"&&c.primaryOther?"Other: "+c.primaryOther:(c.primary||""),other(c.regional,c.regionalOther),other(c.procedures,c.proceduresOther),c.incidents||""]),
+    columnStyles:{0:{cellWidth:7,halign:"right",textColor:PDF_MUTED},1:{cellWidth:17},2:{cellWidth:13},3:{cellWidth:20},4:{cellWidth:20},5:{cellWidth:26},6:{cellWidth:9},7:{cellWidth:8},8:{cellWidth:16},9:{cellWidth:17},10:{cellWidth:19},11:{cellWidth:22},12:{cellWidth:22},13:{cellWidth:26},14:{cellWidth:26}},
+    headStyles:{fillColor:PDF_TEAL,textColor:255,fontStyle:"bold",halign:"left",fontSize:7.2}}));
+  pdfFinish(doc);
+  return doc.output("blob");
+}
+async function runPdf(btn,maker,filename){
+  const old=btn.innerHTML;btn.disabled=true;btn.innerHTML="Creating PDF…";
+  try{const blob=await maker();await dl(filename,blob);}
+  catch(e){toast(e&&e.name==="AbortError"?"Cancelled":"Couldn't create the PDF");}
+  finally{btn.disabled=false;btn.innerHTML=old;}
+}
+const PDF_ICON='<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5"/><path d="M9 14h6M9 17h4"/></svg>';
 
 /* ---- Import / export ---- */
 const CSV_COLS=["date","start","end","hospital","specialty","operation","ageValue","ageUnit","ageBand","asa","asaE","priority","supervision","supervisor","teaching","primary","primaryOther","regional","regionalOther","procedures","proceduresOther","incidents","notes"];
@@ -707,7 +802,9 @@ function viewData(){
   <div class="card" style="grid-column:1/-1"><h2>Appearance</h2><div class="seg">${themeSeg(true)}</div><p class="note">Saved on this device. “Match device” follows your phone's light/dark setting.</p></div>
   <div class="card"><h2>Export</h2><p class="muted" style="margin-top:0">${S.cases.length} case${S.cases.length===1?"":"s"} · ${S.sessions.length} session${S.sessions.length===1?"":"s"}</p>
     <div style="display:flex;gap:8px;flex-wrap:wrap">${S.downloads?`<button class="btn primary" id="xcsv">Download CSV</button><button class="btn" id="xjson">Download backup (JSON)</button>`:""}<button class="btn" id="ccsv">Copy CSV</button></div>
-    <p class="note">CSV opens in Excel or Google Sheets. The JSON backup restores everything into this app, including sessions.</p></div>
+    ${S.downloads?`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px"><button class="btn" id="xpdfs">${PDF_ICON}Summary PDF</button><button class="btn" id="xpdfl">${PDF_ICON}Case log PDF</button></div>`:""}
+    <label class="f" style="margin-top:14px"><span class="lt">Name on PDF reports <span class="hint">optional — e.g. your name and GMC number</span></span><input type="text" id="oname" value="${esc(S.settings.ownerName||"")}" placeholder="Dr A. Trainee · GMC 1234567"></label>
+    <p class="note">CSV opens in Excel or Google Sheets. The JSON backup restores everything into this app, including sessions. PDFs cover all records; for a date range use the ARCP summary or filter the Cases list.</p></div>
   <div class="card"><h2>Import</h2><p class="muted" style="margin-top:0">A JSON backup from this app, or a CSV with the same column headings as the export.</p>
     ${S.mode==="readonly"?`<p class="muted">Not available in a read-only view.</p>`:`<input type="file" id="imp" accept=".json,.csv,application/json,text/csv"><p class="note">Entries with the same ID are updated rather than duplicated.</p>`}</div>
   <div class="card" style="grid-column:1/-1"><h2>Hospitals</h2>
@@ -751,6 +848,9 @@ function bindData(){
   const hadd=()=>{const v=$("#hadd").value.trim().replace(/\s+/g," ");if(!v)return;if(!hospitalList().some(h=>h.toLowerCase()===v.toLowerCase())){S.settings.hospitals=[...new Set([...(S.settings.hospitals||[]),v])];S.settings.hiddenHospitals=(S.settings.hiddenHospitals||[]).filter(h=>h!==v);saveSettings();toast("Hospital added")}render()};
   $("#haddb").onclick=hadd;$("#hadd").onkeydown=e=>{if(e.key==="Enter")hadd()};
   if($("#inst"))$("#inst").onclick=async()=>{if(!deferredPrompt)return;deferredPrompt.prompt();try{await deferredPrompt.userChoice}catch(e){}deferredPrompt=null;render()};
+  if($("#xpdfs"))$("#xpdfs").onclick=e=>runPdf(e.currentTarget,()=>pdfSummary("",""),`logbook-summary-${todayISO()}.pdf`);
+  if($("#xpdfl"))$("#xpdfl").onclick=e=>runPdf(e.currentTarget,()=>pdfCaseLog(S.cases,"All cases"),`case-log-${todayISO()}.pdf`);
+  $("#oname").onchange=e=>{S.settings.ownerName=e.target.value.trim();saveSettings();toast("Saved")};
   if($("#xcsv"))$("#xcsv").onclick=()=>dl(`anaesthetic-logbook-${todayISO()}.csv`,toCSV());
   if($("#xjson"))$("#xjson").onclick=()=>dl(`anaesthetic-logbook-backup-${todayISO()}.json`,JSON.stringify({app:"anaesthetic-logbook",version:1,exported:new Date().toISOString(),records:[...S.cases,...S.sessions]},null,1));
   $("#ccsv").onclick=async()=>{try{await navigator.clipboard.writeText(toCSV());toast("CSV copied to clipboard")}catch(e){toast("Copy isn't available here")}};
