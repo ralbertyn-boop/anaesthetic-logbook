@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0f6b5c">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Logbook">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<title>Anaesthetic Logbook</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#f4f6f5; --panel:#ffffff; --ink:#15211d; --ink2:#4a5853; --ink3:#7d8a85;
+  --line:#dde3e0; --line2:#eef1ef; --accent:#0f6b5c; --accent2:#e3f1ed; --accentInk:#0b4f44;
+  --warn:#b4471f; --warnBg:#fbeee8; --amber:#a8730c; --amberBg:#fbf3e0;
+  --r:10px; --shadow:0 1px 2px rgba(16,33,28,.06),0 2px 8px rgba(16,33,28,.04);
+  --mono:'IBM Plex Mono',ui-monospace,monospace;
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#0f1513; --panel:#161e1b; --ink:#e6ece9; --ink2:#a9b6b1; --ink3:#77847f;
+  --line:#26312d; --line2:#1c2522; --accent:#3cb39c; --accent2:#173029; --accentInk:#7fd8c5;
+  --warn:#f08a64; --warnBg:#3a1f16; --amber:#e3b453; --amberBg:#33280f; --shadow:none;
+}}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 'IBM Plex Sans',system-ui,sans-serif}
+button,input,select,textarea{font:inherit;color:inherit}
+.app{display:grid;grid-template-columns:220px 1fr;min-height:100vh}
+nav.side{border-right:1px solid var(--line);padding:20px 14px;position:sticky;top:0;height:100vh;background:var(--panel)}
+.brand{font-weight:700;letter-spacing:-.01em;font-size:16px;padding:0 8px 4px}
+.brand small{display:block;font-weight:400;color:var(--ink3);font-size:12px;letter-spacing:0}
+nav.side .links{margin-top:22px;display:flex;flex-direction:column;gap:2px}
+.navbtn{display:flex;align-items:center;gap:10px;border:0;background:none;padding:9px 10px;border-radius:8px;cursor:pointer;color:var(--ink2);text-align:left;font-weight:500}
+.navbtn:hover{background:var(--line2);color:var(--ink)}
+.navbtn.on{background:var(--accent2);color:var(--accentInk)}
+.navbtn svg{width:18px;height:18px;flex:none}
+.side .addbtn{margin-top:18px;width:100%}
+.storage{position:absolute;bottom:18px;left:14px;right:14px;font-size:12px;color:var(--ink3);padding:0 8px}
+.dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--ink3);margin-right:6px;vertical-align:1px}
+.dot.ok{background:var(--accent)} .dot.warn{background:var(--amber)}
+main{padding:calc(28px + env(safe-area-inset-top)) 32px 80px;max-width:1180px;width:100%}
+h1{font-size:24px;letter-spacing:-.015em;margin:0 0 4px}
+h2{font-size:16px;margin:0 0 12px;letter-spacing:-.005em}
+.sub{color:var(--ink3);margin:0 0 22px;font-size:14px}
+.btn{border:1px solid var(--line);background:var(--panel);padding:8px 14px;border-radius:8px;cursor:pointer;font-weight:500;display:inline-flex;align-items:center;gap:7px;justify-content:center}
+.btn:hover{border-color:var(--ink3)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+@media (prefers-color-scheme:dark){.btn.primary{color:#06231d}}
+.btn.primary:hover{filter:brightness(1.07)}
+.btn.danger{color:var(--warn)}
+.btn.sm{padding:5px 10px;font-size:13px}
+.btn:disabled{opacity:.5;cursor:default}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:18px;box-shadow:var(--shadow)}
+.grid{display:grid;gap:14px}
+.kpis{grid-template-columns:repeat(4,1fr);margin-bottom:14px}
+.kpi .v{font-size:28px;font-weight:600;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.kpi .l{color:var(--ink3);font-size:13px}
+.kpi .h{color:var(--ink2);font-size:12px;margin-top:2px}
+.two{grid-template-columns:1fr 1fr}
+.bars{display:flex;flex-direction:column;gap:7px}
+.bar{display:grid;grid-template-columns:150px 1fr 44px;align-items:center;gap:10px;font-size:13px}
+.bar .t{height:10px;background:var(--line2);border-radius:5px;overflow:hidden}
+.bar .t i{display:block;height:100%;background:var(--accent);border-radius:5px}
+.bar .n{text-align:right;font-variant-numeric:tabular-nums;color:var(--ink2)}
+.bar .k{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.months{display:flex;align-items:flex-end;gap:6px;height:140px;padding-top:10px}
+.months .m{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;height:100%;justify-content:flex-end}
+.months .m i{width:100%;max-width:34px;background:var(--accent);border-radius:4px 4px 0 0;min-height:2px}
+.months .m span{font-size:11px;color:var(--ink3)}
+.months .m b{font-size:11px;font-weight:500;color:var(--ink2);font-variant-numeric:tabular-nums}
+.empty{text-align:center;padding:48px 20px;color:var(--ink2)}
+.empty h2{font-size:18px}
+/* form */
+form .sec{margin-bottom:14px}
+.fgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px 16px}
+.fgrid .w2{grid-column:span 2}.fgrid .w3{grid-column:1/-1}
+label.f{display:flex;flex-direction:column;gap:5px;font-size:13px;font-weight:500;color:var(--ink2)}
+label.f .req{color:var(--warn)}
+.lt{display:block}.lt .hint{margin-left:6px}
+input[type=text],input[type=date],input[type=time],input[type=number],input[type=search],select,textarea{border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:8px 10px;width:100%;min-height:38px}
+textarea{min-height:76px;resize:vertical}
+input:focus,select:focus,textarea:focus{outline:2px solid var(--accent);outline-offset:-1px;border-color:transparent}
+.fieldlabel{font-size:13px;font-weight:500;color:var(--ink2);margin-bottom:6px;display:block}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{border:1px solid var(--line);background:var(--panel);border-radius:999px;padding:6px 12px;font-size:13px;cursor:pointer;user-select:none;line-height:1.2}
+.chip:hover{border-color:var(--ink3)}
+.chip.on{background:var(--accent);border-color:var(--accent);color:#fff}
+@media (prefers-color-scheme:dark){.chip.on{color:#06231d}}
+.chip.e.on{background:var(--warn);border-color:var(--warn)}
+.agebox{display:flex;gap:6px}.agebox input{flex:1}.agebox select{width:auto}
+.hint{font-size:12px;color:var(--ink3);font-weight:400}
+.formbar{position:sticky;bottom:0;background:linear-gradient(transparent,var(--bg) 30%);padding:18px 0 4px;display:flex;gap:10px;justify-content:flex-end}
+.err{color:var(--warn);font-size:12px}
+.invalid .chips,.invalid input,.invalid select{outline:1px solid var(--warn);border-radius:8px}
+/* list */
+.toolbar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;align-items:center}
+.toolbar input[type=search]{flex:1;min-width:200px}
+.toolbar select,.toolbar input[type=date]{width:auto}
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th{text-align:left;font-weight:500;color:var(--ink3);font-size:12px;text-transform:uppercase;letter-spacing:.04em;padding:8px 10px;border-bottom:1px solid var(--line)}
+td{padding:10px;border-bottom:1px solid var(--line2);vertical-align:top}
+tr.row{cursor:pointer}
+tr.row:hover td{background:var(--line2)}
+.tag{display:inline-block;font-size:11.5px;padding:2px 7px;border-radius:5px;background:var(--line2);color:var(--ink2);margin:0 4px 3px 0;white-space:nowrap}
+.tag.e{background:var(--warnBg);color:var(--warn)}
+.tag.a{background:var(--accent2);color:var(--accentInk)}
+.mono{font-family:var(--mono);font-size:12.5px}
+.muted{color:var(--ink3)}
+.listcards{display:none}
+/* report */
+.rep table{font-size:13px;font-variant-numeric:tabular-nums}
+.rep th,.rep td{padding:6px 8px;border:1px solid var(--line)}
+.rep th{text-transform:none;letter-spacing:0;font-size:12px;color:var(--ink2);background:var(--line2)}
+.rep td.n{text-align:right}
+.rep tr.tot td{font-weight:600;background:var(--line2)}
+.rep h2{margin-top:24px}
+.rep .scroll{overflow-x:auto}
+/* modal & toast */
+.scrim{position:fixed;inset:0;background:rgba(10,20,17,.45);display:flex;align-items:center;justify-content:center;z-index:50;padding:16px}
+.modal{background:var(--panel);border-radius:12px;max-width:620px;width:100%;max-height:88vh;overflow:auto;padding:22px;border:1px solid var(--line)}
+.modal h2{font-size:18px}
+.modal dl{display:grid;grid-template-columns:150px 1fr;gap:6px 14px;margin:14px 0;font-size:14px}
+.modal dt{color:var(--ink3)} .modal dd{margin:0}
+.modal .acts{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-top:16px}
+.toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:8px;font-size:14px;z-index:60;box-shadow:0 4px 18px rgba(0,0,0,.2)}
+.banner{background:var(--amberBg);color:var(--amber);border-radius:8px;padding:10px 14px;font-size:13px;margin-bottom:16px}
+.note{font-size:12.5px;color:var(--ink3);margin-top:10px}
+.mobnav{display:none}
+@media (max-width:860px){
+  .app{grid-template-columns:1fr}
+  nav.side{display:none}
+  main{padding:calc(18px + env(safe-area-inset-top)) calc(14px + env(safe-area-inset-right)) 96px calc(14px + env(safe-area-inset-left))}
+  .kpis{grid-template-columns:1fr 1fr}
+  .two{grid-template-columns:1fr}
+  .fgrid{grid-template-columns:1fr 1fr}
+  .fgrid .w2{grid-column:1/-1}
+  .bar{grid-template-columns:110px 1fr 36px}
+  .listtable{display:none}.listcards{display:flex;flex-direction:column;gap:8px}
+  .mobnav{display:flex;position:fixed;bottom:0;left:0;right:0;background:var(--panel);border-top:1px solid var(--line);z-index:40;padding:6px 4px calc(6px + env(safe-area-inset-bottom))}
+  .mobnav .navbtn{flex:1;flex-direction:column;gap:2px;font-size:11px;padding:6px 2px;align-items:center}
+  .mobnav .navbtn.add{color:var(--accent)}
+  .modal dl{grid-template-columns:110px 1fr}
+}
+.lcard{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px;cursor:pointer}
+.lcard .top{display:flex;justify-content:space-between;gap:10px;font-size:13px;color:var(--ink3)}
+.lcard .op{font-weight:600;margin:3px 0 6px}
+</style>
+</head>
+<body>
+<div class="app">
+  <nav class="side">
+    <div class="brand">Anaesthetic Logbook<small>RCoA-style case record · offline</small></div>
+    <button class="btn primary addbtn" data-go="add">+ Log a case</button>
+    <div class="links" id="sidelinks"></div>
+    <div class="storage" id="storage"><span class="dot"></span>Connecting…</div>
+  </nav>
+  <main id="main"></main>
+</div>
+<nav class="mobnav" id="mobnav"></nav>
+<div id="layer"></div>
+
+<script>
+/* ============ Reference data — RCoA Logbook Summary Data Set (2021 curriculum, Feb 2026 version) ============ */
+const SPECIALTIES=["Cardiac","Dental","ENT","General","Gynaecology","Maxillo-facial","Miscellaneous","Neuro","Obstetrics","Ophthalmic","Orthopaedics","Pain","Plastics","Radiology","Resuscitation","Transfer Interhospital","Transfer Intrahospital","Trauma","Thoracic","Urology","Vascular"];
+const SUPERVISION=["In Theatre","In Theatre Suite","In Hospital","Outside the Hospital"];
+const SUP_HINT={"In Theatre":"Supervisor present in theatre","In Theatre Suite":"In the suite, immediately available","In Hospital":"In the hospital","Outside the Hospital":"Off site / solo"};
+const AGE_BANDS=["<1 year","1-4 years","5-9 years","10-17 years","Adult"];
+const ASA=["1","2","3","4","5","Donor"];
+const PRIORITY=["Day surgery","Elective","Emergency"];
+const TIME_BANDS=["08.00 - 18.00","18.00 - 00.00","00.00 - 08.00"];
+const PRIMARY=["GA Mask","GA Supraglottic Airway Device","GA ETT Direct Laryngoscopy","GA ETT Video Laryngoscopy","Sedation","Monitoring only","Regional","Other"];
+const REGIONAL=["Spinal","Lumbar Epidural","Combined Spinal Epidural (CSE)","Brachial Plexus Block","Lower Limb Nerve Block","Ultrasound-guided Chest Wall Block","Ultrasound-guided Abdominal Wall Block","Other"];
+const PROCEDURES=["CVC","Arterial line","Venous Line for Renal Replacement Therapy","Ultrasound Guided Venous Cannula","Rapid Sequence Induction (RSI)","Total Intravenous Anaesthesia (TIVA)","Use of High-Flow Nasal Oxygen (HFNO) for Intubation","Fibreoptic Intubation under sedation/anaesthesia","Fibreoptic Intubation awake","Intubation through Supraglottic Airway Device (Simulation)","Flexible Bronchoscopy","Percutaneous Tracheostomy","Double Lumen ETT","Chest Drain (Simulation)","Needle Thoracocentesis (Simulation)","Emergency Front of Neck Access (Simulation)","Other"];
+const SESSION_TYPES=["Peri-Operative Medicine (POM)","Acute Pain","Chronic Pain"];
+
+/* ============ Helpers ============ */
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,8);
+const pad=n=>String(n).padStart(2,"0");
+const todayISO=()=>{const d=new Date();return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate())};
+const nowHM=()=>{const d=new Date();return pad(d.getHours())+":"+pad(d.getMinutes())};
+const fmtDate=iso=>{if(!iso)return"";const[y,m,d]=iso.split("-");return `${d} ${["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][+m-1]} ${y}`};
+function ageBand(c){
+  const v=parseFloat(c.ageValue); if(isNaN(v))return null;
+  const yrs=c.ageUnit==="days"?v/365:c.ageUnit==="months"?v/12:v;
+  if(yrs<1)return AGE_BANDS[0]; if(yrs<5)return AGE_BANDS[1]; if(yrs<10)return AGE_BANDS[2]; if(yrs<18)return AGE_BANDS[3]; return AGE_BANDS[4];
+}
+function timeBand(t){ if(!t)return null; const h=+t.split(":")[0]; if(h>=8&&h<18)return TIME_BANDS[0]; if(h>=18)return TIME_BANDS[1]; return TIME_BANDS[2]; }
+function ageText(c){ if(c.ageValue===""||c.ageValue==null)return""; return c.ageValue+(c.ageUnit==="years"?" y":c.ageUnit==="months"?" mo":" d"); }
+function toast(msg){const t=document.createElement("div");t.className="toast";t.textContent=msg;document.body.appendChild(t);setTimeout(()=>t.remove(),2600)}
+
+/* ============ Storage: artifact db (per-person, private) with local fallback ============ */
+const S={mode:"connecting",db:null,col:null,uid:null,cases:[],sessions:[],settings:{},downloads:null,loaded:false};
+const LKEY="anaes-logbook-v1";
+function localLoad(){try{const j=JSON.parse(localStorage.getItem(LKEY)||"{}");S.cases=j.cases||[];S.sessions=j.sessions||[];S.settings=j.settings||{}}catch(e){}}
+function localSave(){try{localStorage.setItem(LKEY,JSON.stringify({cases:S.cases,sessions:S.sessions,settings:S.settings}))}catch(e){}}
+function setStorageLabel(){
+  const el=$("#storage"); if(!el)return;
+  const m={cloud:['ok','Saved to your account (private)'],local:['ok','Saved on this device'],connecting:['','Connecting…'],readonly:['warn','Read-only view']}[S.mode]||['',''];
+  el.innerHTML=`<span class="dot ${m[0]}"></span>${m[1]}`;
+}
+async function initStore(){
+  S.mode="local";localLoad();S.loaded=true;
+  S.downloads={save:localDownload};
+  try{if(navigator.storage&&navigator.storage.persist)await navigator.storage.persist()}catch(e){}
+  setStorageLabel();render();
+}
+async function localDownload({filename,data}){
+  const type=/\.csv$/.test(filename)?"text/csv":/\.json$/.test(filename)?"application/json":"text/html";
+  const blob=new Blob([data],{type});
+  const mobile=/iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+  if(mobile&&navigator.canShare){try{const file=new File([blob],filename,{type});if(navigator.canShare({files:[file]})){await navigator.share({files:[file],title:filename});return}}catch(e){if(e&&e.name==="AbortError")throw e}}
+  const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=filename;document.body.appendChild(a);a.click();
+  setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1500);
+}
+async function saveRec(rec){
+  rec.updated=new Date().toISOString();
+  if(S.mode==="cloud"){
+    try{await S.col.doc((rec.kind==="case"?"c_":"s_")+rec.id).set(rec);}
+    catch(e){
+      if(e&&e.code==="unavailable"){await new Promise(r=>setTimeout(r,600+Math.random()*600));await S.col.doc((rec.kind==="case"?"c_":"s_")+rec.id).set(rec);}
+      else{toast(e&&e.code==="quota_exceeded"?"Storage is full — export and archive older cases":"Couldn't save — please try again");throw e;}
+    }
+  }else{
+    const arr=rec.kind==="case"?S.cases:S.sessions; const i=arr.findIndex(x=>x.id===rec.id); if(i>=0)arr[i]=rec; else arr.push(rec); localSave();
+  }
+}
+async function deleteRec(rec){
+  if(S.mode==="cloud"){await S.col.doc((rec.kind==="case"?"c_":"s_")+rec.id).delete();}
+  else{const arr=rec.kind==="case"?S.cases:S.sessions;const i=arr.findIndex(x=>x.id===rec.id);if(i>=0)arr.splice(i,1);localSave();}
+}
+async function saveSettings(){ if(S.mode==="cloud"){try{await S.col.doc("settings").set({...S.settings,kind:"settings"})}catch(e){}} else localSave(); }
+function maybeOfferMigration(){
+  try{const j=JSON.parse(localStorage.getItem(LKEY)||"{}");const n=(j.cases||[]).length+(j.sessions||[]).length;
+    if(n&&!S.settings.migrated){modal(`<h2>Move ${n} entries to your account?</h2><p class="muted">Entries were saved earlier in this browser only. Move them into your private account storage so they're available on any device.</p><div class="acts"><button class="btn" data-x>Not now</button><button class="btn primary" id="mig">Move entries</button></div>`);
+      $("#mig").onclick=async()=>{closeModal();await importRecords([...(j.cases||[]),...(j.sessions||[])]);S.settings.migrated=true;saveSettings();try{localStorage.removeItem(LKEY)}catch(e){}};}
+  }catch(e){}
+}
+
+/* ============ Routing ============ */
+const ICONS={
+  dash:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>',
+  add:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>',
+  cases:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 6h13M8 12h13M8 18h13"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></svg>',
+  sessions:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>',
+  report:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 3h9l4 4v14H6z"/><path d="M9 12h7M9 16h7M9 8h3"/></svg>',
+  data:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v12M7 10l5 5 5-5"/><path d="M4 17v3h16v-3"/></svg>'
+};
+const VIEWS=[["dash","Overview"],["cases","Cases"],["sessions","Sessions"],["report","ARCP summary"],["data","Import / export"]];
+let view=(location.hash||"").slice(1)||"dash"; if(!["dash","cases","sessions","report","data","add"].includes(view))view="dash";
+let editing=null; // record being edited
+function go(v,rec){view=v;editing=rec||null;try{history.replaceState(null,"","#"+(v==="add"?"add":v))}catch(e){}render();window.scrollTo(0,0)}
+window.addEventListener("hashchange",()=>{const v=location.hash.slice(1);if(v&&v!==view){view=v;editing=null;render()}});
+document.addEventListener("click",e=>{const g=e.target.closest("[data-go]");if(g){e.preventDefault();go(g.dataset.go)}});
+function renderNav(){
+  $("#sidelinks").innerHTML=VIEWS.map(([k,l])=>`<button class="navbtn ${view===k?"on":""}" data-go="${k}">${ICONS[k]}${l}</button>`).join("");
+  $("#mobnav").innerHTML=[["dash","Overview"],["cases","Cases"],["add","Log case"],["report","Summary"],["data","Data"]].map(([k,l])=>`<button class="navbtn ${k==="add"?"add":""} ${view===k?"on":""}" data-go="${k}">${ICONS[k]}${l}</button>`).join("");
+}
+
+/* ============ Render ============ */
+function render(fromSnapshot){
+  renderNav();
+  if(fromSnapshot&&view==="add"&&document.getElementById("cf"))return; // don't wipe an in-progress form
+  const m=$("#main");
+  if(!S.loaded){m.innerHTML=`<div class="empty"><p>Loading your logbook…</p></div>`;return;}
+  if(view==="dash")m.innerHTML=viewDash();
+  else if(view==="cases"){m.innerHTML=viewCases();bindCases();}
+  else if(view==="sessions"){m.innerHTML=viewSessions();bindSessions();}
+  else if(view==="report"){m.innerHTML=viewReport();bindReport();}
+  else if(view==="data"){m.innerHTML=viewData();bindData();}
+  else if(view==="add"){m.innerHTML=viewForm(editing);bindForm(editing);}
+}
+const sortedCases=()=>[...S.cases].sort((a,b)=>(b.date+(b.start||"")).localeCompare(a.date+(a.start||"")));
+function count(arr,fn){const o={};arr.forEach(x=>{const k=fn(x);if(k==null)return;(Array.isArray(k)?k:[k]).forEach(kk=>o[kk]=(o[kk]||0)+1)});return o}
+function barsHTML(obj,order,limit){
+  let keys=order?order.filter(k=>obj[k]):Object.keys(obj).sort((a,b)=>obj[b]-obj[a]);
+  if(limit)keys=keys.slice(0,limit);
+  const max=Math.max(1,...keys.map(k=>obj[k]));
+  if(!keys.length)return`<p class="muted">No data yet</p>`;
+  return `<div class="bars">${keys.map(k=>`<div class="bar"><span class="k" title="${esc(k)}">${esc(k)}</span><span class="t"><i style="width:${obj[k]/max*100}%"></i></span><span class="n">${obj[k]}</span></div>`).join("")}</div>`;
+}
+
+/* ---- Overview ---- */
+function viewDash(){
+  const c=S.cases;
+  if(!c.length)return `<h1>Overview</h1><p class="sub">Your anaesthetic case record, structured to the RCoA logbook summary data set.</p>
+    <div class="card empty"><h2>No cases logged yet</h2><p>Log your first case — it takes about 30 seconds. Everything is summarised into the RCoA ARCP format automatically.</p>
+    <p><button class="btn primary" data-go="add">+ Log your first case</button> <button class="btn" data-go="data">Import existing cases</button></p></div>`;
+  const now=new Date(); const d30=new Date(now-30*864e5).toISOString().slice(0,10);
+  const ty=now.getMonth()>=7?now.getFullYear():now.getFullYear()-1; const tyStart=`${ty}-08-01`;
+  const last30=c.filter(x=>x.date>=d30).length, tyN=c.filter(x=>x.date>=tyStart).length;
+  const ooh=c.filter(x=>timeBand(x.start)&&timeBand(x.start)!==TIME_BANDS[0]).length;
+  const indep=c.filter(x=>x.supervision==="In Hospital"||x.supervision==="Outside the Hospital").length;
+  const pct=n=>c.length?Math.round(n/c.length*100)+"%":"–";
+  // last 12 months
+  const months=[];for(let i=11;i>=0;i--){const d=new Date(now.getFullYear(),now.getMonth()-i,1);months.push([d.getFullYear()+"-"+pad(d.getMonth()+1),"JFMAMJJASOND"[d.getMonth()]])}
+  const mc=count(c,x=>x.date&&x.date.slice(0,7)); const mmax=Math.max(1,...months.map(([k])=>mc[k]||0));
+  const asaObj=count(c,x=>x.asa?("ASA "+x.asa+(x.asaE?"E":"")):null);
+  const asaOrder=[];ASA.forEach(a=>{asaOrder.push("ASA "+a);asaOrder.push("ASA "+a+"E")});
+  return `<h1>Overview</h1><p class="sub">${c.length} case${c.length===1?"":"s"} and ${S.sessions.length} session${S.sessions.length===1?"":"s"} logged.</p>
+  <div class="grid kpis">
+    <div class="card kpi"><div class="l">Total cases</div><div class="v">${c.length}</div></div>
+    <div class="card kpi"><div class="l">Training year</div><div class="v">${tyN}</div><div class="h">since 1 Aug ${ty}</div></div>
+    <div class="card kpi"><div class="l">Out of hours</div><div class="v">${pct(ooh)}</div><div class="h">${ooh} outside 08:00–18:00</div></div>
+    <div class="card kpi"><div class="l">Distant supervision</div><div class="v">${pct(indep)}</div><div class="h">In hospital / outside</div></div>
+  </div>
+  <div class="card" style="margin-bottom:14px"><h2>Cases per month <span class="muted" style="font-weight:400">· last 12 months · ${last30} in last 30 days</span></h2>
+    <div class="months">${months.map(([k,l])=>`<div class="m"><b>${mc[k]||""}</b><i style="height:${(mc[k]||0)/mmax*100}%"></i><span>${l}</span></div>`).join("")}</div></div>
+  <div class="grid two">
+    <div class="card"><h2>By specialty</h2>${barsHTML(count(c,x=>x.specialty),null,10)}</div>
+    <div class="card"><h2>Actual level of supervision</h2>${barsHTML(count(c,x=>x.supervision),SUPERVISION)}
+      <h2 style="margin-top:20px">Age group</h2>${barsHTML(count(c,ageBand),AGE_BANDS)}</div>
+    <div class="card"><h2>ASA grade</h2>${barsHTML(asaObj,asaOrder)}
+      <h2 style="margin-top:20px">Priority</h2>${barsHTML(count(c,x=>x.priority),PRIORITY)}</div>
+    <div class="card"><h2>Primary mode of anaesthesia</h2>${barsHTML(count(c,x=>x.primary),PRIMARY)}</div>
+  </div>`;
+}
+
+/* ---- Case list ---- */
+let F={q:"",spec:"",from:"",to:"",n:60};
+function filtered(){
+  const q=F.q.toLowerCase();
+  return sortedCases().filter(c=>(!F.spec||c.specialty===F.spec)&&(!F.from||c.date>=F.from)&&(!F.to||c.date<=F.to)&&
+    (!q||[c.operation,c.hospital,c.supervisor,c.notes,c.incidents,c.primary,(c.regional||[]).join(" "),(c.procedures||[]).join(" ")].join(" ").toLowerCase().includes(q)));
+}
+function caseTags(c){
+  return `<span class="tag a">ASA ${esc(c.asa)}${c.asaE?"E":""}</span>${c.priority==="Emergency"?'<span class="tag e">Emergency</span>':`<span class="tag">${esc(c.priority||"")}</span>`}<span class="tag">${esc(c.primary||"")}</span>${(c.regional||[]).map(r=>`<span class="tag">${esc(r==="Other"&&c.regionalOther?c.regionalOther:r)}</span>`).join("")}${(c.procedures||[]).map(r=>`<span class="tag">${esc(r==="Other"&&c.proceduresOther?c.proceduresOther:r)}</span>`).join("")}`;
+}
+function viewCases(){
+  const list=filtered(); const shown=list.slice(0,F.n);
+  return `<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap"><div><h1>Cases</h1><p class="sub">${list.length} of ${S.cases.length} shown</p></div><button class="btn primary" data-go="add">+ Log a case</button></div>
+  <div class="toolbar">
+    <input type="search" id="fq" placeholder="Search operation, hospital, supervisor, technique, notes…" value="${esc(F.q)}">
+    <select id="fs"><option value="">All specialties</option>${SPECIALTIES.map(s=>`<option ${F.spec===s?"selected":""}>${s}</option>`).join("")}</select>
+    <input type="date" id="ff" value="${F.from}" title="From"><input type="date" id="ft" value="${F.to}" title="To">
+  </div>
+  ${!list.length?`<div class="card empty">${S.cases.length?"No cases match these filters.":"No cases yet."}</div>`:`
+  <div class="card listtable" style="padding:6px 8px"><table><thead><tr><th>Date</th><th>Specialty / operation</th><th>Age</th><th>Supervision</th><th>Technique</th></tr></thead><tbody>
+  ${shown.map(c=>`<tr class="row" data-id="${c.id}"><td class="mono">${fmtDate(c.date)}<br><span class="muted">${esc(c.start||"")}</span></td><td><b>${esc(c.specialty)}</b><br>${esc(c.operation||"—")}<div class="muted" style="font-size:12px">${esc(c.hospital||"")}</div></td><td>${esc(ageText(c))}</td><td>${esc(c.supervision)}${c.supervisor?`<div class="muted" style="font-size:12px">${esc(c.supervisor)}</div>`:""}</td><td>${caseTags(c)}</td></tr>`).join("")}
+  </tbody></table></div>
+  <div class="listcards">${shown.map(c=>`<div class="lcard" data-id="${c.id}"><div class="top"><span class="mono">${fmtDate(c.date)} ${esc(c.start||"")}</span><span>${esc(c.specialty)}</span></div><div class="op">${esc(c.operation||c.specialty)}</div><div>${caseTags(c)}</div></div>`).join("")}</div>
+  ${list.length>F.n?`<p style="text-align:center"><button class="btn" id="more">Show more</button></p>`:""}`}`;
+}
+function bindCases(){
+  const upd=()=>{F.q=$("#fq").value;F.spec=$("#fs").value;F.from=$("#ff").value;F.to=$("#ft").value;F.n=60;const pos=$("#fq").selectionStart;render();const q=$("#fq");q.focus();try{q.setSelectionRange(pos,pos)}catch(e){}};
+  $("#fq").oninput=upd;["#fs","#ff","#ft"].forEach(s=>$(s).onchange=upd);
+  if($("#more"))$("#more").onclick=()=>{F.n+=100;render()};
+  document.querySelectorAll("[data-id]").forEach(el=>el.onclick=()=>showCase(S.cases.find(c=>c.id===el.dataset.id)));
+}
+function showCase(c){
+  if(!c)return;
+  const row=(k,v)=>v?`<dt>${k}</dt><dd>${v}</dd>`:"";
+  const ro=S.mode==="readonly";
+  modal(`<h2>${esc(c.operation||c.specialty)}</h2><div class="muted">${fmtDate(c.date)} ${esc(c.start||"")}${c.end?"–"+esc(c.end):""} · ${esc(c.hospital||"")}</div>
+  <dl>${row("Specialty",esc(c.specialty))}${row("Patient age",esc(ageText(c))+` <span class="muted">(${esc(ageBand(c)||"")})</span>`)}${row("ASA",esc(c.asa)+(c.asaE?"E":""))}${row("Priority",esc(c.priority))}
+  ${row("Supervision",esc(c.supervision))}${row("Supervisor",esc(c.supervisor))}${row("Primary mode",esc(c.primary==="Other"&&c.primaryOther?"Other: "+c.primaryOther:c.primary))}
+  ${row("Regional",(c.regional||[]).map(r=>esc(r==="Other"&&c.regionalOther?"Other: "+c.regionalOther:r)).join("<br>"))}
+  ${row("Procedures",(c.procedures||[]).map(r=>esc(r==="Other"&&c.proceduresOther?"Other: "+c.proceduresOther:r)).join("<br>"))}
+  ${row("Teaching",c.teaching?"Supervising / teaching another anaesthetist":"")}
+  ${row("Critical incidents",esc(c.incidents).replace(/\n/g,"<br>"))}${row("Notes / learning",esc(c.notes).replace(/\n/g,"<br>"))}</dl>
+  <div class="acts">${ro?"":`<button class="btn danger" id="del">Delete</button><button class="btn" id="dup">Duplicate</button><button class="btn primary" id="edit">Edit</button>`}<button class="btn" data-x>Close</button></div>`);
+  if(ro)return;
+  $("#edit").onclick=()=>{closeModal();go("add",c)};
+  $("#dup").onclick=()=>{closeModal();const d={...c,id:null,date:todayISO(),start:nowHM(),end:"",incidents:"",notes:""};go("add",d)};
+  $("#del").onclick=()=>confirmDel(c);
+}
+function confirmDel(rec){
+  modal(`<h2>Delete this ${rec.kind==="case"?"case":"session"}?</h2><p class="muted">This can't be undone.</p><div class="acts"><button class="btn" data-x>Cancel</button><button class="btn primary" style="background:var(--warn);border-color:var(--warn)" id="yes">Delete</button></div>`);
+  $("#yes").onclick=async()=>{try{await deleteRec(rec);closeModal();toast("Deleted");render()}catch(e){toast("Couldn't delete")}};
+}
+
+/* ---- Case form ---- */
+function chipGroup(name,opts,val,multi,extraClass){
+  const vals=multi?(val||[]):[val];
+  return `<div class="chips" data-chips="${name}" data-multi="${multi?1:0}">${opts.map(o=>`<button type="button" class="chip ${extraClass||""} ${vals.includes(o)?"on":""}" data-v="${esc(o)}">${esc(o)}</button>`).join("")}</div>`;
+}
+function viewForm(c){
+  const isNew=!c||!c.id;
+  const last=sortedCases()[0]||{};
+  c=c||{date:todayISO(),start:nowHM(),hospital:S.settings.hospital||last.hospital||"",ageUnit:"years",regional:[],procedures:[]};
+  const hosp=[...new Set(S.cases.map(x=>x.hospital).filter(Boolean))], sups=[...new Set(S.cases.map(x=>x.supervisor).filter(Boolean))];
+  return `<h1>${isNew?"Log a case":"Edit case"}</h1><p class="sub">Fields follow the RCoA logbook summary data set. Don't enter patient identifiers (name, NHS/hospital number, DOB).</p>
+  <form id="cf" novalidate>
+  <div class="card sec"><h2>When & where</h2><div class="fgrid">
+    <label class="f"><span class="lt">Date <span class="req">*</span></span><input type="date" name="date" value="${esc(c.date)}" required></label>
+    <label class="f"><span class="lt">Start time <span class="hint">sets time-of-day band</span></span><input type="time" name="start" value="${esc(c.start||"")}"></label>
+    <label class="f"><span class="lt">End time</span><input type="time" name="end" value="${esc(c.end||"")}"></label>
+    <label class="f w2"><span class="lt">Hospital</span><input type="text" name="hospital" list="hl" value="${esc(c.hospital||"")}" autocomplete="off"><datalist id="hl">${hosp.map(h=>`<option value="${esc(h)}">`).join("")}</datalist></label>
+    <label class="f" data-req="specialty"><span class="lt">Specialty <span class="req">*</span></span><select name="specialty"><option value="">Select…</option>${SPECIALTIES.map(s=>`<option ${c.specialty===s?"selected":""}>${s}</option>`).join("")}</select></label>
+    <label class="f w3"><span class="lt">Operation / procedure</span><input type="text" name="operation" value="${esc(c.operation||"")}" placeholder="e.g. Laparoscopic cholecystectomy"></label>
+  </div></div>
+  <div class="card sec"><h2>Patient</h2><div class="fgrid">
+    <label class="f" data-req="age"><span class="lt">Age <span class="req">*</span></span><span class="agebox"><input type="number" name="ageValue" min="0" step="any" inputmode="decimal" value="${esc(c.ageValue??"")}"><select name="ageUnit">${["years","months","days"].map(u=>`<option ${c.ageUnit===u?"selected":""}>${u}</option>`).join("")}</select></span><span class="hint" id="aband">${esc(ageBand(c)||"")}</span></label>
+    <div class="w2" data-req="asa"><span class="fieldlabel">ASA grade <span class="req" style="color:var(--warn)">*</span></span><div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">${chipGroup("asa",ASA,c.asa)}<div class="chips" data-chips="asaE" data-multi="1"><button type="button" class="chip e ${c.asaE?"on":""}" data-v="E">E — emergency</button></div></div></div>
+    <div class="w3" data-req="priority"><span class="fieldlabel">Priority <span class="req" style="color:var(--warn)">*</span></span>${chipGroup("priority",PRIORITY,c.priority)}</div>
+  </div></div>
+  <div class="card sec"><h2>Supervision</h2><div class="fgrid">
+    <div class="w3" data-req="supervision"><span class="fieldlabel">Actual level of supervision <span class="req" style="color:var(--warn)">*</span></span>${chipGroup("supervision",SUPERVISION,c.supervision)}<div class="hint" id="suphint" style="margin-top:6px">${esc(SUP_HINT[c.supervision]||"Where was your supervisor during the case?")}</div></div>
+    <label class="f w2"><span class="lt">Supervisor</span><input type="text" name="supervisor" list="sl" value="${esc(c.supervisor||"")}" autocomplete="off" placeholder="Name of consultant / supervisor"><datalist id="sl">${sups.map(h=>`<option value="${esc(h)}">`).join("")}</datalist></label>
+    <label class="f" style="flex-direction:row;align-items:center;gap:8px;margin-top:22px"><input type="checkbox" name="teaching" ${c.teaching?"checked":""}> I was supervising / teaching</label>
+  </div></div>
+  <div class="card sec"><h2>Anaesthetic</h2>
+    <div data-req="primary" style="margin-bottom:14px"><span class="fieldlabel">Primary mode <span class="req" style="color:var(--warn)">*</span></span>${chipGroup("primary",PRIMARY,c.primary)}
+      <input type="text" name="primaryOther" placeholder="Specify other primary mode" value="${esc(c.primaryOther||"")}" style="margin-top:8px;${c.primary==="Other"?"":"display:none"}"></div>
+    <div style="margin-bottom:14px"><span class="fieldlabel">Secondary mode / regional techniques <span class="hint">select all that apply</span></span>${chipGroup("regional",REGIONAL,c.regional,true)}
+      <input type="text" name="regionalOther" placeholder="Specify other regional technique" value="${esc(c.regionalOther||"")}" style="margin-top:8px;${(c.regional||[]).includes("Other")?"":"display:none"}"></div>
+    <div><span class="fieldlabel">Additional procedures <span class="hint">select all that apply</span></span>${chipGroup("procedures",PROCEDURES,c.procedures,true)}
+      <input type="text" name="proceduresOther" placeholder="Specify other procedure" value="${esc(c.proceduresOther||"")}" style="margin-top:8px;${(c.procedures||[]).includes("Other")?"":"display:none"}"></div>
+  </div>
+  <div class="card sec"><h2>Reflection</h2><div class="fgrid">
+    <label class="f w3"><span class="lt">Critical incidents / events</span><textarea name="incidents" placeholder="e.g. Laryngospasm on emergence — managed with CPAP and propofol">${esc(c.incidents||"")}</textarea></label>
+    <label class="f w3"><span class="lt">Notes & learning points</span><textarea name="notes" placeholder="Anything worth remembering for SLEs, reflection or your ES meeting">${esc(c.notes||"")}</textarea></label>
+  </div></div>
+  <div class="formbar">${isNew?"":`<button type="button" class="btn" id="cancel">Cancel</button>`}<button type="submit" class="btn" name="again" value="1">Save & log another</button><button type="submit" class="btn primary">${isNew?"Save case":"Save changes"}</button></div>
+  </form>`;
+}
+function bindForm(orig){
+  const f=$("#cf");
+  f.querySelectorAll("[data-chips]").forEach(g=>{
+    g.addEventListener("click",e=>{const b=e.target.closest(".chip");if(!b)return;
+      if(g.dataset.multi==="1")b.classList.toggle("on");else{const was=b.classList.contains("on");g.querySelectorAll(".chip").forEach(x=>x.classList.remove("on"));if(!was)b.classList.add("on")}
+      const name=g.dataset.chips;
+      if(name==="supervision"){const v=g.querySelector(".on");$("#suphint").textContent=v?SUP_HINT[v.dataset.v]:"Where was your supervisor during the case?"}
+      if(name==="primary")f.primaryOther.style.display=g.querySelector('.on[data-v="Other"]')?"":"none";
+      if(name==="regional")f.regionalOther.style.display=g.querySelector('.on[data-v="Other"]')?"":"none";
+      if(name==="procedures")f.proceduresOther.style.display=g.querySelector('.on[data-v="Other"]')?"":"none";
+      if(name==="primary"&&g.querySelector('.on[data-v="Regional"]')&&!f.querySelector('[data-chips="regional"] .on'))toast("Select the regional technique below");
+      g.closest("[data-req]")?.classList.remove("invalid");
+    });
+  });
+  const ab=()=>{$("#aband").textContent=ageBand({ageValue:f.ageValue.value,ageUnit:f.ageUnit.value})||""};
+  f.ageValue.oninput=ab;f.ageUnit.onchange=ab;
+  if($("#cancel"))$("#cancel").onclick=()=>go("cases");
+  let saving=false;
+  f.onsubmit=async e=>{
+    e.preventDefault(); if(saving)return;
+    const again=e.submitter&&e.submitter.name==="again";
+    const sel=n=>{const o=f.querySelector(`[data-chips="${n}"] .on`);return o?o.dataset.v:""};
+    const multi=n=>[...f.querySelectorAll(`[data-chips="${n}"] .on`)].map(o=>o.dataset.v);
+    const rec={kind:"case",id:(orig&&orig.id)||uid(),created:(orig&&orig.created)||new Date().toISOString(),
+      date:f.date.value,start:f.start.value,end:f.end.value,hospital:f.hospital.value.trim(),specialty:f.specialty.value,operation:f.operation.value.trim(),
+      ageValue:f.ageValue.value===""?"":+f.ageValue.value,ageUnit:f.ageUnit.value,asa:sel("asa"),asaE:multi("asaE").includes("E"),priority:sel("priority"),
+      supervision:sel("supervision"),supervisor:f.supervisor.value.trim(),teaching:f.teaching.checked,
+      primary:sel("primary"),primaryOther:f.primaryOther.value.trim(),regional:multi("regional"),regionalOther:f.regionalOther.value.trim(),
+      procedures:multi("procedures"),proceduresOther:f.proceduresOther.value.trim(),incidents:f.incidents.value.trim(),notes:f.notes.value.trim()};
+    const miss=[];
+    if(!rec.date){miss.push("date");f.date.parentElement.classList.add("invalid")}
+    [["specialty",rec.specialty],["age",rec.ageValue!==""],["asa",rec.asa],["priority",rec.priority],["supervision",rec.supervision],["primary",rec.primary]].forEach(([k,v])=>{const el=f.querySelector(`[data-req="${k}"]`);if(!v){miss.push(k);el.classList.add("invalid")}else el.classList.remove("invalid")});
+    if(miss.length){toast("Please complete the required fields");f.querySelector(".invalid")?.scrollIntoView({behavior:"smooth",block:"center"});return}
+    saving=true;
+    try{await saveRec(rec);}catch(err){saving=false;return}
+    if(rec.hospital&&S.settings.hospital!==rec.hospital){S.settings.hospital=rec.hospital;saveSettings()}
+    toast(orig&&orig.id?"Changes saved":"Case saved");
+    if(again){go("add",{date:rec.date,start:"",hospital:rec.hospital,specialty:rec.specialty,supervision:rec.supervision,supervisor:rec.supervisor,ageUnit:"years",regional:[],procedures:[]})}
+    else go("cases");
+  };
+}
+
+/* ---- Sessions (POM / acute pain / chronic pain) ---- */
+function viewSessions(){
+  const list=[...S.sessions].sort((a,b)=>b.date.localeCompare(a.date));
+  const ro=S.mode==="readonly";
+  const cnt=count(S.sessions,x=>x.type);
+  return `<h1>Sessions</h1><p class="sub">Peri-operative medicine, acute pain and chronic pain sessions are counted separately in the RCoA summary.</p>
+  <div class="grid kpis" style="grid-template-columns:repeat(3,1fr)">${SESSION_TYPES.map(t=>`<div class="card kpi"><div class="l">${t}</div><div class="v">${cnt[t]||0}</div></div>`).join("")}</div>
+  ${ro?"":`<form class="card" id="sf" style="margin-bottom:14px"><h2>Add a session</h2><div class="fgrid">
+    <label class="f"><span class="lt">Date</span><input type="date" name="date" value="${todayISO()}"></label>
+    <label class="f"><span class="lt">Type</span><select name="type">${SESSION_TYPES.map(t=>`<option>${t}</option>`).join("")}</select></label>
+    <label class="f"><span class="lt">Hospital</span><input type="text" name="hospital" value="${esc(S.settings.hospital||"")}"></label>
+    <label class="f w2"><span class="lt">Notes</span><input type="text" name="notes" placeholder="Clinic, ward round, supervisor…"></label>
+    <div style="display:flex;align-items:flex-end"><button class="btn primary" style="width:100%">Add session</button></div></div></form>`}
+  <div class="card" style="padding:6px 8px">${list.length?`<table><thead><tr><th>Date</th><th>Type</th><th>Hospital</th><th>Notes</th><th></th></tr></thead><tbody>${list.map(s=>`<tr><td class="mono">${fmtDate(s.date)}</td><td>${esc(s.type)}</td><td>${esc(s.hospital||"")}</td><td>${esc(s.notes||"")}</td><td style="text-align:right">${ro?"":`<button class="btn sm danger" data-del="${s.id}">Delete</button>`}</td></tr>`).join("")}</tbody></table>`:`<p class="muted" style="padding:12px">No sessions logged yet.</p>`}</div>`;
+}
+function bindSessions(){
+  const f=$("#sf"); if(f)f.onsubmit=async e=>{e.preventDefault();if(!f.date.value){toast("Add a date");return}
+    try{await saveRec({kind:"session",id:uid(),created:new Date().toISOString(),date:f.date.value,type:f.type.value,hospital:f.hospital.value.trim(),notes:f.notes.value.trim()});toast("Session added");render()}catch(e){}};
+  document.querySelectorAll("[data-del]").forEach(b=>b.onclick=()=>confirmDel(S.sessions.find(s=>s.id===b.dataset.del)));
+}
+
+/* ---- ARCP summary (RCoA Logbook Summary Data Set) ---- */
+let R={from:"",to:""};
+function reportData(){
+  const inR=x=>(!R.from||x.date>=R.from)&&(!R.to||x.date<=R.to);
+  return {cases:S.cases.filter(inR),sessions:S.sessions.filter(inR)};
+}
+function crossTable(title,rows,rowFn,cases){
+  const body=rows.map(r=>{const sub=cases.filter(c=>rowFn(c)===r);return `<tr><td>${esc(r)}</td>${SUPERVISION.map(s=>`<td class="n">${sub.filter(c=>c.supervision===s).length||""}</td>`).join("")}<td class="n"><b>${sub.length||""}</b></td></tr>`}).join("");
+  return `<h2>${title} and Actual Level of Supervision</h2><div class="scroll"><table><thead><tr><th></th>${SUPERVISION.map(s=>`<th>${s}</th>`).join("")}<th>Total</th></tr></thead><tbody>${body}</tbody></table></div>`;
+}
+function reportHTML(){
+  const {cases,sessions}=reportData();
+  const specRows=SPECIALTIES.map(sp=>{const sub=cases.filter(c=>c.specialty===sp);return `<tr><td>${sp}</td><td class="n"><b>${sub.length||""}</b></td>${SUPERVISION.map(s=>`<td class="n">${sub.filter(c=>c.supervision===s).length||""}</td>`).join("")}${AGE_BANDS.map(a=>`<td class="n">${sub.filter(c=>ageBand(c)===a).length||""}</td>`).join("")}</tr>`}).join("");
+  const totRow=`<tr class="tot"><td>TOTALS</td><td class="n">${cases.length}</td>${SUPERVISION.map(s=>`<td class="n">${cases.filter(c=>c.supervision===s).length}</td>`).join("")}${AGE_BANDS.map(a=>`<td class="n">${cases.filter(c=>ageBand(c)===a).length}</td>`).join("")}</tr>`;
+  const sc=count(sessions,x=>x.type);
+  const listT=(title,opts,fn,otherFn)=>{const o=count(cases,fn);const others=otherFn?[...new Set(cases.map(otherFn).filter(Boolean))]:[];return `<tr><th colspan="2" style="text-align:left">${title}</th></tr>${opts.map(k=>`<tr><td>${esc(k)}${k==="Other"&&others.length?` <span class="muted">(${esc(others.join("; "))})</span>`:""}</td><td class="n">${o[k]||""}</td></tr>`).join("")}`};
+  return `<div class="rep">
+  <p class="muted">Summary for period: <b>${R.from?fmtDate(R.from):"all records"}</b> to <b>${R.to?fmtDate(R.to):"present"}</b> · ${cases.length} cases</p>
+  <h2>Logbook summary</h2><div class="scroll"><table><thead>
+  <tr><th rowspan="2">Specialty</th><th rowspan="2">Total cases</th><th colspan="4">Actual Level of Supervision</th><th colspan="5">Age of Patient (Years)</th></tr>
+  <tr>${SUPERVISION.map(s=>`<th>${s}</th>`).join("")}<th>&lt;1 yr</th><th>1-4</th><th>5-9</th><th>10-17</th><th>Adult</th></tr></thead><tbody>${specRows}${totRow}</tbody></table></div>
+  <h2>Sessions</h2><table style="max-width:460px"><tbody>${SESSION_TYPES.map(t=>`<tr><td>Number of ${t} sessions</td><td class="n">${sc[t]||0}</td></tr>`).join("")}</tbody></table>
+  ${crossTable("ASA Grade",ASA,c=>c.asa,cases)}
+  ${crossTable("Age Group",AGE_BANDS,ageBand,cases)}
+  ${crossTable("Time of Day",TIME_BANDS,c=>timeBand(c.start),cases)}
+  ${crossTable("Priority",PRIORITY,c=>c.priority,cases)}
+  <h2>Mode of Anaesthesia</h2><table style="max-width:620px"><thead><tr><th>Description</th><th>Number of cases</th></tr></thead><tbody>
+  ${listT("Primary mode",PRIMARY,c=>c.primary,c=>c.primary==="Other"?c.primaryOther:null)}
+  ${listT("Secondary mode / regional techniques",REGIONAL,c=>c.regional||[],c=>(c.regional||[]).includes("Other")?c.regionalOther:null)}
+  ${listT("Additional procedures",PROCEDURES,c=>c.procedures||[],c=>(c.procedures||[]).includes("Other")?c.proceduresOther:null)}
+  </tbody></table>
+  ${cases.some(c=>!c.start)?`<p class="note">${cases.filter(c=>!c.start).length} case(s) have no start time and are not counted in the time-of-day table.</p>`:""}
+  </div>`;
+}
+function viewReport(){
+  const now=new Date();const ty=now.getMonth()>=7?now.getFullYear():now.getFullYear()-1;
+  return `<h1>ARCP summary</h1><p class="sub">Laid out in the RCoA's recommended Logbook Summary Data Set format for the 2021 curriculum.</p>
+  <div class="toolbar"><label class="f" style="flex-direction:row;align-items:center;gap:6px"><span class="lt">From </span><input type="date" id="rf" value="${R.from}"></label><label class="f" style="flex-direction:row;align-items:center;gap:6px"><span class="lt">To </span><input type="date" id="rt" value="${R.to}"></label>
+  <button class="btn sm" id="rty">This training year</button><button class="btn sm" id="r12">Last 12 months</button><button class="btn sm" id="rall">All</button>
+  <span style="flex:1"></span>${S.downloads?`<button class="btn sm primary" id="rdl">Download report</button>`:""}<button class="btn sm" id="rcp">Copy table</button></div>
+  <div class="card">${reportHTML()}</div>`;
+}
+function bindReport(){
+  const now=new Date();const ty=now.getMonth()>=7?now.getFullYear():now.getFullYear()-1;
+  $("#rf").onchange=e=>{R.from=e.target.value;render()};$("#rt").onchange=e=>{R.to=e.target.value;render()};
+  $("#rty").onclick=()=>{R.from=`${ty}-08-01`;R.to="";render()};
+  $("#r12").onclick=()=>{const d=new Date(now);d.setFullYear(d.getFullYear()-1);R.from=d.toISOString().slice(0,10);R.to="";render()};
+  $("#rall").onclick=()=>{R.from="";R.to="";render()};
+  if($("#rdl"))$("#rdl").onclick=async()=>{
+    const css=`body{font:13px/1.4 Arial,sans-serif;color:#111;margin:24px}table{border-collapse:collapse;margin-bottom:8px}th,td{border:1px solid #999;padding:4px 7px}th{background:#eee}td.n{text-align:right}tr.tot td{font-weight:bold;background:#f3f3f3}.muted{color:#666}h2{font-size:15px;margin:20px 0 6px}`;
+    const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Logbook summary</title><style>${css}</style></head><body><h1 style="font-size:18px">Anaesthetic logbook summary</h1>${reportHTML()}</body></html>`;
+    await dl(`logbook-summary-${todayISO()}.html`,html);
+  };
+  $("#rcp").onclick=async()=>{
+    const {cases}=reportData();
+    const lines=[["Specialty","Total",...SUPERVISION,...AGE_BANDS].join("\t")];
+    SPECIALTIES.forEach(sp=>{const sub=cases.filter(c=>c.specialty===sp);lines.push([sp,sub.length,...SUPERVISION.map(s=>sub.filter(c=>c.supervision===s).length),...AGE_BANDS.map(a=>sub.filter(c=>ageBand(c)===a).length)].join("\t"))});
+    lines.push(["TOTALS",cases.length,...SUPERVISION.map(s=>cases.filter(c=>c.supervision===s).length),...AGE_BANDS.map(a=>cases.filter(c=>ageBand(c)===a).length)].join("\t"));
+    try{await navigator.clipboard.writeText(lines.join("\n"));toast("Summary table copied — paste into Excel or Word")}catch(e){toast("Copy isn't available here")}
+  };
+}
+
+/* ---- Import / export ---- */
+const CSV_COLS=["date","start","end","hospital","specialty","operation","ageValue","ageUnit","ageBand","asa","asaE","priority","supervision","supervisor","teaching","primary","primaryOther","regional","regionalOther","procedures","proceduresOther","incidents","notes"];
+function toCSV(){
+  const q=v=>{v=v==null?"":String(v);return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v};
+  return [CSV_COLS.join(","),...sortedCases().map(c=>CSV_COLS.map(k=>q(k==="ageBand"?ageBand(c):Array.isArray(c[k])?c[k].join("; "):typeof c[k]==="boolean"?(c[k]?"Y":""):c[k])).join(","))].join("\n");
+}
+async function dl(filename,data){
+  if(!S.downloads){toast("Downloads aren't available here");return}
+  try{await S.downloads.save({filename,data});}catch(e){toast("Download was cancelled")}
+}
+function viewData(){
+  return `<h1>Import / export</h1><p class="sub">Keep a backup, move cases into the LLP, or bring in records from elsewhere.</p>
+  <div class="grid two">
+  <div class="card"><h2>Export</h2><p class="muted" style="margin-top:0">${S.cases.length} cases · ${S.sessions.length} sessions</p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">${S.downloads?`<button class="btn primary" id="xcsv">Download CSV</button><button class="btn" id="xjson">Download backup (JSON)</button>`:""}<button class="btn" id="ccsv">Copy CSV</button></div>
+    <p class="note">CSV opens in Excel or Google Sheets. The JSON backup restores everything into this app, including sessions.</p></div>
+  <div class="card"><h2>Import</h2><p class="muted" style="margin-top:0">A JSON backup from this app, or a CSV with the same column headings as the export.</p>
+    ${S.mode==="readonly"?`<p class="muted">Not available in a read-only view.</p>`:`<input type="file" id="imp" accept=".json,.csv,application/json,text/csv"><p class="note">Entries with the same ID are updated rather than duplicated.</p>`}</div>
+  <div class="card" style="grid-column:1/-1" id="installcard"><h2>Install on your home screen</h2>
+    ${window.matchMedia("(display-mode: standalone)").matches||navigator.standalone?`<p style="margin:0">✓ Running as an installed app.</p>`:`
+    ${deferredPrompt?`<p style="margin-top:0"><button class="btn primary" id="inst">Install app</button></p>`:""}
+    <p style="margin:0 0 6px"><b>iPhone / iPad (Safari):</b> tap the Share button → <i>Add to Home Screen</i>.</p>
+    <p style="margin:0 0 6px"><b>Android (Chrome):</b> tap ⋮ → <i>Install app</i> or <i>Add to Home screen</i>.</p>
+    <p style="margin:0"><b>Desktop (Chrome / Edge):</b> click the install icon in the address bar.</p>`}
+    <p class="note">Once installed it works offline. Last backup reminder: export a JSON backup now and then — it's your only copy outside this device.</p></div>
+  <div class="card" style="grid-column:1/-1"><h2>About your data</h2>
+    <p style="margin-top:0">${S.mode==="cloud"?"Your entries are stored privately against your account: other people who can open this page can't see them, and they follow you to any device where you're signed in.":S.mode==="local"?"Your entries are stored only on this device, inside the app. Nothing is sent anywhere. Deleting the app or clearing site data erases them, so download a JSON backup regularly (for example, monthly and before changing phone).":"This view can't save changes."}</p>
+    <p class="muted">This is an independent tool, not an official RCoA product. The LLP remains the logbook the College recommends for ARCP. Record anonymised case details only — never names, hospital or NHS numbers, or dates of birth.</p></div>
+  </div>`;
+}
+function parseCSV(text){
+  const rows=[];let row=[],f="",q=false;
+  for(let i=0;i<text.length;i++){const ch=text[i];
+    if(q){if(ch==='"'){if(text[i+1]==='"'){f+='"';i++}else q=false}else f+=ch}
+    else if(ch==='"')q=true; else if(ch===","){row.push(f);f=""} else if(ch==="\n"||ch==="\r"){if(ch==="\r"&&text[i+1]==="\n")i++;row.push(f);rows.push(row);row=[];f=""} else f+=ch}
+  if(f||row.length){row.push(f);rows.push(row)}
+  const head=rows.shift()||[];
+  return rows.filter(r=>r.some(x=>x.trim())).map(r=>{const o={kind:"case",id:uid()};head.forEach((h,i)=>{h=h.trim();const v=(r[i]||"").trim();
+    if(h==="regional"||h==="procedures")o[h]=v?v.split(/;\s*/):[]; else if(h==="asaE"||h==="teaching")o[h]=/^(y|yes|true|1)$/i.test(v); else if(h==="ageValue")o[h]=v===""?"":+v; else if(h!=="ageBand")o[h]=v});
+    o.ageUnit=o.ageUnit||"years";o.created=new Date().toISOString();return o});
+}
+async function importRecords(recs){
+  recs=recs.filter(r=>r&&(r.kind==="case"||r.kind==="session")&&r.date);
+  if(!recs.length){toast("No valid entries found in that file");return}
+  let ok=0;const prog=document.createElement("div");prog.className="toast";document.body.appendChild(prog);
+  for(const r of recs){r.id=String(r.id||uid()).replace(/[^A-Za-z0-9_\-.~:@+]/g,"").slice(0,60)||uid();prog.textContent=`Importing ${ok+1} of ${recs.length}…`;
+    try{await saveRec(r);ok++}catch(e){if(e&&e.code==="quota_exceeded")break;}
+    if(S.mode==="cloud")await new Promise(res=>setTimeout(res,40));}
+  prog.remove();toast(`Imported ${ok} of ${recs.length} entries`);render();
+}
+function bindData(){
+  if($("#inst"))$("#inst").onclick=async()=>{if(!deferredPrompt)return;deferredPrompt.prompt();try{await deferredPrompt.userChoice}catch(e){}deferredPrompt=null;render()};
+  if($("#xcsv"))$("#xcsv").onclick=()=>dl(`anaesthetic-logbook-${todayISO()}.csv`,toCSV());
+  if($("#xjson"))$("#xjson").onclick=()=>dl(`anaesthetic-logbook-backup-${todayISO()}.json`,JSON.stringify({app:"anaesthetic-logbook",version:1,exported:new Date().toISOString(),records:[...S.cases,...S.sessions]},null,1));
+  $("#ccsv").onclick=async()=>{try{await navigator.clipboard.writeText(toCSV());toast("CSV copied to clipboard")}catch(e){toast("Copy isn't available here")}};
+  const imp=$("#imp"); if(imp)imp.onchange=async()=>{const file=imp.files[0];if(!file)return;const text=await file.text();let recs=[];
+    try{ if(/\.json$/i.test(file.name)||text.trim().startsWith("{")||text.trim().startsWith("[")){const j=JSON.parse(text);recs=Array.isArray(j)?j:(j.records||[])} else recs=parseCSV(text);}catch(e){toast("Couldn't read that file");return}
+    await importRecords(recs);imp.value="";};
+}
+
+/* ---- Modal ---- */
+function modal(html){$("#layer").innerHTML=`<div class="scrim"><div class="modal" role="dialog" aria-modal="true">${html}</div></div>`;
+  $("#layer .scrim").onclick=e=>{if(e.target.classList.contains("scrim")||e.target.closest("[data-x]"))closeModal()}}
+function closeModal(){$("#layer").innerHTML=""}
+document.addEventListener("keydown",e=>{if(e.key==="Escape")closeModal()});
+
+let deferredPrompt=null;
+window.addEventListener("beforeinstallprompt",e=>{e.preventDefault();deferredPrompt=e;if(view==="data")render()});
+window.addEventListener("appinstalled",()=>{deferredPrompt=null;toast("Installed");if(view==="data")render()});
+if("serviceWorker" in navigator&&location.protocol!=="file:"){window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}))}
+render(); initStore();
+</script>
+</body>
+</html>
