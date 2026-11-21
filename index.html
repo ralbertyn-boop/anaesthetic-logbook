@@ -288,6 +288,27 @@ input[type=date]::-webkit-datetime-edit,input[type=time]::-webkit-datetime-edit{
   .toolbar label.f{flex:1 1 100%}
   .toolbar label.f input[type=date]{flex:1}
 }
+
+/* ---------- Multi-filter ---------- */
+.badge{display:inline-grid;place-items:center;min-width:20px;height:20px;padding:0 6px;border-radius:10px;background:var(--warn);color:#fff;font-size:11.5px;font-weight:800;text-shadow:none}
+.fpanel{margin-bottom:14px;padding:18px 20px}
+.fgroup{padding:12px 0;border-bottom:1px solid var(--line2)}
+.fgroup:first-child{padding-top:0}
+.fghead{display:flex;justify-content:space-between;align-items:center;font-size:13px;font-weight:700;color:var(--ink2);margin-bottom:8px}
+.frow{display:flex;gap:10px;flex-wrap:wrap}.frow label.f{flex:1 1 150px}
+.chip.sm{padding:5px 11px;font-size:12.5px}
+.chip .cn{display:inline-block;margin-left:6px;font-size:11px;font-weight:700;opacity:.6}
+.chip.on .cn{opacity:.85}
+.chip.zero{opacity:.45}
+.linkbtn{border:0;background:none;color:var(--p3);font-weight:700;font-size:12.5px;cursor:pointer;padding:2px 4px;text-decoration:underline;text-underline-offset:2px}
+.fpfoot{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:14px 20px 16px;margin:0 -20px -18px;font-size:12.5px;position:sticky;bottom:0;background:var(--panel);border-top:1px solid var(--line2);border-radius:0 0 var(--r) var(--r);z-index:5}
+.fpills{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:-4px 0 12px}
+.fpill{display:inline-flex;align-items:center;gap:6px;background:var(--accent2);color:var(--accentInk);border:1px solid var(--line);border-radius:999px;padding:4px 5px 4px 11px;font-size:12.5px;font-weight:600}
+.fpill i{font-style:normal;opacity:.7;font-weight:500}
+.fpill button{border:0;background:var(--panel);width:20px;height:20px;border-radius:50%;cursor:pointer;color:var(--ink2);font-weight:800;line-height:1;box-shadow:0 1px 0 var(--line)}
+.fresult{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;font-size:14px;color:var(--ink2)}
+@media (max-width:860px){.fpanel{padding:14px}.fpfoot{margin:0 -14px -14px;padding:12px 14px;bottom:calc(74px + env(safe-area-inset-bottom));box-shadow:0 -6px 14px -8px rgba(40,90,95,.25)}.fpfoot .muted{display:none}.fpfoot .btn{flex:1}}
+.modal .mh{font-size:14px;font-weight:700;margin:16px 0 8px;color:var(--ink2)}
 </style>
 </head>
 <body>
@@ -507,24 +528,90 @@ function viewDash(){
 }
 
 /* ---- Case list ---- */
-let F={q:"",spec:"",from:"",to:"",n:60};
-function filtered(){
-  const q=F.q.toLowerCase();
-  return sortedCases().filter(c=>(!F.spec||c.specialty===F.spec)&&(!F.from||c.date>=F.from)&&(!F.to||c.date<=F.to)&&
-    (!q||[c.operation,c.hospital,c.supervisor,c.notes,c.incidents,c.primary,(c.regional||[]).join(" "),(c.procedures||[]).join(" ")].join(" ").toLowerCase().includes(q)));
+/* ---- Multi-filter ---- */
+const FKEY="anaes-logbook-filters";
+const FLAG_OPTS=["ASA E (emergency)","Critical incident recorded","I was supervising / teaching","Out of hours (18:00–08:00)","Has notes"];
+const FILTER_DEFS=[
+  {k:"specialty",label:"Specialty",opts:()=>SPECIALTIES,get:c=>c.specialty},
+  {k:"hospital",label:"Hospital",opts:()=>hospitalList(),get:c=>c.hospital},
+  {k:"supervision",label:"Supervision",opts:()=>SUPERVISION,get:c=>c.supervision},
+  {k:"supervisor",label:"Supervisor",opts:()=>[...new Set(S.cases.map(c=>c.supervisor).filter(Boolean))].sort((a,b)=>a.localeCompare(b)),get:c=>c.supervisor},
+  {k:"asa",label:"ASA",opts:()=>ASA,get:c=>c.asa,fmt:v=>v==="Donor"?v:"ASA "+v},
+  {k:"age",label:"Age group",opts:()=>AGE_BANDS,get:c=>ageBand(c)},
+  {k:"priority",label:"Priority",opts:()=>PRIORITY,get:c=>c.priority},
+  {k:"time",label:"Time of day",opts:()=>TIME_BANDS,get:c=>timeBand(c.start)},
+  {k:"primary",label:"Primary mode",opts:()=>PRIMARY,get:c=>c.primary},
+  {k:"regional",label:"Regional technique",opts:()=>REGIONAL,get:c=>c.regional||[]},
+  {k:"procedures",label:"Additional procedure",opts:()=>PROCEDURES,get:c=>c.procedures||[]},
+  {k:"flags",label:"Other",opts:()=>FLAG_OPTS,get:c=>[c.asaE?FLAG_OPTS[0]:null,c.incidents?FLAG_OPTS[1]:null,c.teaching?FLAG_OPTS[2]:null,(timeBand(c.start)&&timeBand(c.start)!==TIME_BANDS[0])?FLAG_OPTS[3]:null,c.notes?FLAG_OPTS[4]:null].filter(Boolean),all:true},
+];
+function blankSel(){const o={};FILTER_DEFS.forEach(d=>o[d.k]=[]);return o}
+let F={q:"",from:"",to:"",n:60,open:false,sel:blankSel()};
+try{const saved=JSON.parse(localStorage.getItem(FKEY)||"null");if(saved){F.from=saved.from||"";F.to=saved.to||"";F.sel=Object.assign(blankSel(),saved.sel||{})}}catch(e){}
+function saveFilters(){try{localStorage.setItem(FKEY,JSON.stringify({from:F.from,to:F.to,sel:F.sel}))}catch(e){}}
+function matchDef(d,c,skipKey){
+  if(d.k===skipKey)return true;
+  const want=F.sel[d.k]; if(!want||!want.length)return true;
+  const v=d.get(c);
+  if(Array.isArray(v))return d.all?want.every(w=>v.includes(w)):want.some(w=>v.includes(w));
+  return want.includes(v);
 }
+function baseMatch(c){
+  const q=F.q.toLowerCase();
+  return (!F.from||c.date>=F.from)&&(!F.to||c.date<=F.to)&&
+    (!q||[c.operation,c.hospital,c.supervisor,c.notes,c.incidents,c.specialty,c.primary,c.primaryOther,(c.regional||[]).join(" "),(c.procedures||[]).join(" ")].join(" ").toLowerCase().includes(q));
+}
+function filtered(skipKey){return sortedCases().filter(c=>baseMatch(c)&&FILTER_DEFS.every(d=>matchDef(d,c,skipKey)))}
+function activeCount(){return FILTER_DEFS.reduce((n,d)=>n+F.sel[d.k].length,0)+(F.from||F.to?1:0)+(F.q?1:0)}
+function filterLabel(){
+  const parts=[];
+  if(F.from||F.to)parts.push(`${F.from?fmtDate(F.from):"start"} to ${F.to?fmtDate(F.to):"present"}`);
+  FILTER_DEFS.forEach(d=>{if(F.sel[d.k].length)parts.push(`${d.label}: ${F.sel[d.k].map(v=>d.fmt?d.fmt(v):v).join(d.all?" + ":" / ")}`)});
+  if(F.q)parts.push(`Search “${F.q}”`);
+  return parts.length?parts.join(" · "):"All cases";
+}
+function clearFilters(){F.q="";F.from="";F.to="";F.sel=blankSel();F.n=60;saveFilters()}
 function caseTags(c){
   return `<span class="tag a">ASA ${esc(c.asa)}${c.asaE?"E":""}</span>${c.priority==="Emergency"?'<span class="tag e">Emergency</span>':`<span class="tag">${esc(c.priority||"")}</span>`}<span class="tag">${esc(c.primary||"")}</span>${(c.regional||[]).map(r=>`<span class="tag">${esc(r==="Other"&&c.regionalOther?c.regionalOther:r)}</span>`).join("")}${(c.procedures||[]).map(r=>`<span class="tag">${esc(r==="Other"&&c.proceduresOther?c.proceduresOther:r)}</span>`).join("")}`;
 }
 function viewCases(){
-  const list=filtered(); const shown=list.slice(0,F.n);
-  return `<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap"><div><h1>Cases</h1><p class="sub">${list.length} of ${S.cases.length} shown</p></div><button class="btn primary" data-go="add">+ Log a case</button></div>
+  const list=filtered(); const shown=list.slice(0,F.n); const nAct=activeCount();
+  const now=new Date();const ty=now.getMonth()>=7?now.getFullYear():now.getFullYear()-1;
+  const iso=d=>d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());
+  const ago=m=>{const d=new Date(now);d.setMonth(d.getMonth()-m);return iso(d)};
+  const presets=[["Training year",`${ty}-08-01`,""],["Last 3 months",ago(3),""],["Last 12 months",ago(12),""],["All dates","",""]];
+  // per-option counts: cases matching every other filter
+  const groups=FILTER_DEFS.map(d=>{
+    const pool=filtered(d.k); const cnt=count(pool,c=>{const v=d.get(c);return v==null||v===""?null:v});
+    let opts=d.opts(); F.sel[d.k].forEach(v=>{if(!opts.includes(v))opts=[...opts,v]});
+    if(!opts.length)return "";
+    const fixed=["supervision","asa","age","priority","time","flags"].includes(d.k);
+    const inLog=count(S.cases,c=>{const v=d.get(c);return v==null||v===""?null:v});
+    const visible=opts.filter(o=>fixed||F.sel[d.k].includes(o)||inLog[o]);
+    if(!visible.length)return "";
+    return `<div class="fgroup"><div class="fghead"><span>${d.label}${d.all?' <span class="hint">all must match</span>':""}</span>${F.sel[d.k].length?`<button class="linkbtn" data-fclear="${d.k}">Clear</button>`:""}</div>
+      <div class="chips">${visible.map(o=>{const on=F.sel[d.k].includes(o),n=cnt[o]||0;return `<button type="button" class="chip sm ${on?"on":""} ${!n&&!on?"zero":""}" data-fk="${d.k}" data-fv="${esc(o)}">${esc(d.fmt?d.fmt(o):o)}<span class="cn">${n}</span></button>`}).join("")}</div></div>`;
+  }).join("");
+  const pills=[];
+  if(F.from||F.to)pills.push(`<span class="fpill">${F.from?fmtDate(F.from):"Start"} – ${F.to?fmtDate(F.to):"present"}<button data-pdate title="Remove">×</button></span>`);
+  FILTER_DEFS.forEach(d=>F.sel[d.k].forEach(v=>pills.push(`<span class="fpill"><i>${d.label}</i> ${esc(d.fmt?d.fmt(v):v)}<button data-pk="${d.k}" data-pv="${esc(v)}" title="Remove">×</button></span>`)));
+  return `<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap"><div><h1>Cases</h1><p class="sub">${list.length} of ${S.cases.length} case${S.cases.length===1?"":"s"}${nAct?" match your filters":""}</p></div><button class="btn primary" data-go="add">+ Log a case</button></div>
   <div class="toolbar">
-    <input type="search" id="fq" placeholder="Search operation, hospital, supervisor, technique, notes…" value="${esc(F.q)}">
-    <select id="fs"><option value="">All specialties</option>${SPECIALTIES.map(s=>`<option ${F.spec===s?"selected":""}>${s}</option>`).join("")}</select>
-    <input type="date" id="ff" value="${F.from}" title="From"><input type="date" id="ft" value="${F.to}" title="To">${S.downloads&&list.length?`<button class="btn sm" id="cpdf" title="PDF of the cases shown">${PDF_ICON}PDF</button>`:""}
+    <input type="search" id="fq" placeholder="Search cases…" value="${esc(F.q)}">
+    <button class="btn ${F.open?"primary":""}" id="ftog"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 5h18l-7 8v6l-4 2v-8z"/></svg>Filters${nAct-(F.q?1:0)>0?` <span class="badge">${nAct-(F.q?1:0)}</span>`:""}</button>
   </div>
-  ${!list.length?`<div class="card empty">${S.cases.length?"No cases match these filters.":"No cases yet."}</div>`:`
+  ${F.open?`<div class="card fpanel">
+    <div class="fgroup"><div class="fghead"><span>Date range</span></div>
+      <div class="frow"><label class="f"><span class="lt">From</span><input type="date" id="ff" value="${F.from}"></label><label class="f"><span class="lt">To</span><input type="date" id="ft" value="${F.to}"></label></div>
+      <div class="chips" style="margin-top:8px">${presets.map(([l,f,t])=>`<button type="button" class="chip sm ${F.from===f&&F.to===t&&(f||l==="All dates")?"on":""}" data-pf="${f}" data-pt="${t}">${l}</button>`).join("")}</div></div>
+    ${groups}
+    <div class="fpfoot"><span class="muted">Options within a group are “any of”; different groups must all match. Numbers show how many cases each option would give.</span><span style="flex:1"></span>
+      ${nAct?`<button class="btn sm danger" id="fclr">Clear all</button>`:""}<button class="btn sm primary" id="fdone">Show ${list.length} case${list.length===1?"":"s"}</button></div>
+  </div>`:""}
+  ${pills.length||F.q?`<div class="fpills">${pills.join("")}${F.q?`<span class="fpill"><i>Search</i> “${esc(F.q)}”<button data-pq title="Remove">×</button></span>`:""}<button class="linkbtn" id="fclr2">Clear all</button></div>`:""}
+  ${list.length?`<div class="fresult"><span><b>${list.length}</b> case${list.length===1?"":"s"}</span><span style="flex:1"></span>
+    <button class="btn sm" id="fsum">Summarise</button>${S.downloads?`<button class="btn sm" id="cpdf" title="PDF of these cases">${PDF_ICON}PDF</button><button class="btn sm" id="ccsvf">CSV</button>`:""}</div>`:""}
+  ${!list.length?`<div class="card empty">${S.cases.length?`No cases match these filters.<p style="margin-top:12px"><button class="btn" id="fclr3">Clear filters</button></p>`:"No cases yet."}</div>`:`
   <div class="card listtable" style="padding:6px 8px"><table><thead><tr><th>Date</th><th>Specialty / operation</th><th>Age</th><th>Supervision</th><th>Technique</th></tr></thead><tbody>
   ${shown.map(c=>`<tr class="row" data-id="${c.id}"><td class="mono">${fmtDate(c.date)}<br><span class="muted">${esc(c.start||"")}</span></td><td><b>${esc(c.specialty)}</b><br>${esc(c.operation||"—")}<div class="muted" style="font-size:12px">${esc(c.hospital||"")}</div></td><td>${esc(ageText(c))}</td><td>${esc(c.supervision)}${c.supervisor?`<div class="muted" style="font-size:12px">${esc(c.supervisor)}</div>`:""}</td><td>${caseTags(c)}</td></tr>`).join("")}
   </tbody></table></div>
@@ -532,11 +619,42 @@ function viewCases(){
   ${list.length>F.n?`<p style="text-align:center"><button class="btn" id="more">Show more</button></p>`:""}`}`;
 }
 function bindCases(){
-  const upd=()=>{F.q=$("#fq").value;F.spec=$("#fs").value;F.from=$("#ff").value;F.to=$("#ft").value;F.n=60;const pos=$("#fq").selectionStart;render();const q=$("#fq");q.focus();try{q.setSelectionRange(pos,pos)}catch(e){}};
-  $("#fq").oninput=upd;["#fs","#ff","#ft"].forEach(s=>$(s).onchange=upd);
+  const rer=()=>{F.n=60;saveFilters();render()};
+  $("#fq").oninput=()=>{F.q=$("#fq").value;F.n=60;const pos=$("#fq").selectionStart;render();const q=$("#fq");q.focus();try{q.setSelectionRange(pos,pos)}catch(e){}};
+  $("#ftog").onclick=()=>{F.open=!F.open;render()};
+  if($("#ff"))$("#ff").onchange=e=>{F.from=e.target.value;rer()};
+  if($("#ft"))$("#ft").onchange=e=>{F.to=e.target.value;rer()};
+  document.querySelectorAll("[data-pf]").forEach(b=>b.onclick=()=>{F.from=b.dataset.pf;F.to=b.dataset.pt;rer()});
+  document.querySelectorAll("[data-fk]").forEach(b=>b.onclick=()=>{const k=b.dataset.fk,v=b.dataset.fv,a=F.sel[k];const i=a.indexOf(v);if(i>=0)a.splice(i,1);else a.push(v);const y=window.scrollY;rer();window.scrollTo(0,y)});
+  document.querySelectorAll("[data-fclear]").forEach(b=>b.onclick=()=>{F.sel[b.dataset.fclear]=[];const y=window.scrollY;rer();window.scrollTo(0,y)});
+  document.querySelectorAll("[data-pk]").forEach(b=>b.onclick=()=>{const a=F.sel[b.dataset.pk];a.splice(a.indexOf(b.dataset.pv),1);rer()});
+  if($("[data-pdate]"))$("[data-pdate]").onclick=()=>{F.from="";F.to="";rer()};
+  if($("[data-pq]"))$("[data-pq]").onclick=()=>{F.q="";render()};
+  ["#fclr","#fclr2","#fclr3"].forEach(id=>{if($(id))$(id).onclick=()=>{clearFilters();render()}});
+  if($("#fdone"))$("#fdone").onclick=()=>{F.open=false;render();window.scrollTo(0,0)};
   if($("#more"))$("#more").onclick=()=>{F.n+=100;render()};
-  if($("#cpdf"))$("#cpdf").onclick=e=>{const filt=F.q||F.spec||F.from||F.to;const label=filt?[F.spec,F.q?`“${F.q}”`:"",(F.from||F.to)?`${F.from?fmtDate(F.from):"start"} to ${F.to?fmtDate(F.to):"present"}`:""].filter(Boolean).join(" · "):"All cases";runPdf(e.currentTarget,()=>pdfCaseLog(filtered(),label),`case-log-${todayISO()}.pdf`)};
+  if($("#cpdf"))$("#cpdf").onclick=e=>runPdf(e.currentTarget,()=>pdfCaseLog(filtered(),filterLabel()),`case-log-${todayISO()}.pdf`);
+  if($("#ccsvf"))$("#ccsvf").onclick=()=>dl(`cases-filtered-${todayISO()}.csv`,toCSV(filtered()));
+  if($("#fsum"))$("#fsum").onclick=()=>showFilterSummary();
   document.querySelectorAll("[data-id]").forEach(el=>el.onclick=()=>showCase(S.cases.find(c=>c.id===el.dataset.id)));
+}
+function showFilterSummary(){
+  const c=filtered(); const ooh=c.filter(x=>timeBand(x.start)&&timeBand(x.start)!==TIME_BANDS[0]).length;
+  const asaObj=count(c,x=>x.asa?("ASA "+x.asa):null);
+  modal(`<h2>Summary of ${c.length} case${c.length===1?"":"s"}</h2><p class="muted" style="margin-top:4px">${esc(filterLabel())}</p>
+   <div class="grid" style="grid-template-columns:repeat(3,1fr);gap:10px;margin:14px 0">
+     <div class="card kpi" style="padding:12px"><div class="l">Cases</div><div class="v" style="font-size:24px">${c.length}</div></div>
+     <div class="card kpi" style="padding:12px"><div class="l">Out of hours</div><div class="v" style="font-size:24px">${c.length?Math.round(ooh/c.length*100):0}%</div></div>
+     <div class="card kpi" style="padding:12px"><div class="l">Emergency</div><div class="v" style="font-size:24px">${c.filter(x=>x.priority==="Emergency").length}</div></div></div>
+   <h3 class="mh">Specialty</h3>${barsHTML(count(c,x=>x.specialty),null,8)}
+   <h3 class="mh">Supervision</h3>${barsHTML(count(c,x=>x.supervision),SUPERVISION)}
+   <h3 class="mh">ASA</h3>${barsHTML(asaObj,ASA.map(a=>"ASA "+a))}
+   <h3 class="mh">Age group</h3>${barsHTML(count(c,ageBand),AGE_BANDS)}
+   <h3 class="mh">Primary mode</h3>${barsHTML(count(c,x=>x.primary),PRIMARY)}
+   ${count(c,x=>x.regional||[])&&Object.keys(count(c,x=>x.regional||[])).length?`<h3 class="mh">Regional</h3>${barsHTML(count(c,x=>x.regional||[]),REGIONAL)}`:""}
+   ${Object.keys(count(c,x=>x.procedures||[])).length?`<h3 class="mh">Additional procedures</h3>${barsHTML(count(c,x=>x.procedures||[]),PROCEDURES)}`:""}
+   <div class="acts">${S.downloads?`<button class="btn" id="sumpdf">${PDF_ICON}Summary PDF of these cases</button>`:""}<button class="btn primary" data-x>Close</button></div>`);
+  if($("#sumpdf"))$("#sumpdf").onclick=e=>runPdf(e.currentTarget,()=>pdfSummary(null,null,filtered(),filterLabel()),`summary-filtered-${todayISO()}.pdf`);
 }
 function showCase(c){
   if(!c)return;
@@ -743,8 +861,9 @@ function pdfStart(title,periodText){
   doc.setFont("helvetica","bold");doc.setFontSize(17);doc.setTextColor(...PDF_INK);doc.text(title,14,16);
   doc.setFont("helvetica","normal");doc.setFontSize(10);doc.setTextColor(...PDF_MUTED);
   const who=(S.settings.ownerName||"").trim();
-  doc.text([who?who:null,periodText].filter(Boolean).join("   ·   "),14,23);
-  return {doc,y:30};
+  const sub=doc.splitTextToSize([who?who:null,periodText].filter(Boolean).join("   ·   "),269);
+  doc.text(sub.slice(0,3),14,23);
+  return {doc,y:30+Math.max(0,Math.min(sub.length,3)-1)*4.5};
 }
 function pdfFinish(doc){
   const n=doc.getNumberOfPages(), gen="Generated "+fmtDate(todayISO());
@@ -764,12 +883,12 @@ function pdfSection(doc,y,title,need){
   doc.setFont("helvetica","bold");doc.setFontSize(11.5);doc.setTextColor(...PDF_INK);doc.text(title,14,y);return y+3;
 }
 const nz=n=>n?String(n):"";
-async function pdfSummary(from,to){
+async function pdfSummary(from,to,presetCases,presetLabel){
   await loadPdf();
   const inR=x=>(!from||x.date>=from)&&(!to||x.date<=to);
-  const cases=S.cases.filter(inR),sessions=S.sessions.filter(inR);
-  const period=`Period: ${from?fmtDate(from):"all records"} to ${to?fmtDate(to):"present"}  ·  ${cases.length} case${cases.length===1?"":"s"}`;
-  const {doc}=pdfStart("Logbook summary",period); let y=30;
+  const cases=presetCases||S.cases.filter(inR),sessions=presetCases?[]:S.sessions.filter(inR);
+  const period=presetCases?`Filtered: ${presetLabel}  ·  ${cases.length} case${cases.length===1?"":"s"}`:`Period: ${from?fmtDate(from):"all records"} to ${to?fmtDate(to):"present"}  ·  ${cases.length} case${cases.length===1?"":"s"}`;
+  const st=pdfStart("Logbook summary",period); const doc=st.doc; let y=st.y;
   const num={halign:"right"};
   y=pdfSection(doc,y,"Cases by specialty, supervision and age");
   const body=SPECIALTIES.map(sp=>{const sub=cases.filter(c=>c.specialty===sp);return [sp,nz(sub.length),...SUPERVISION.map(sv=>nz(sub.filter(c=>c.supervision===sv).length)),...AGE_BANDS.map(a=>nz(sub.filter(c=>ageBand(c)===a).length))]});
@@ -778,9 +897,9 @@ async function pdfSummary(from,to){
   doc.autoTable(pdfTableOpts({startY:y,head:[[{content:"Specialty",rowSpan:2},{content:"Total cases",rowSpan:2},{content:"Actual Level of Supervision",colSpan:4},{content:"Age of Patient (Years)",colSpan:5}],[...SUPERVISION,"<1 yr","1-4","5-9","10-17","Adult"]],body,foot,columnStyles:cs,showFoot:"lastPage",styles:{font:"helvetica",fontSize:8,cellPadding:1.1,lineColor:[216,230,229],lineWidth:.2,textColor:PDF_INK,valign:"middle"}}));
   y=doc.lastAutoTable.finalY+10;
   const sc=count(sessions,x=>x.type);
-  y=pdfSection(doc,y,"Sessions",30);
+  if(!presetCases){y=pdfSection(doc,y,"Sessions",30);
   doc.autoTable(pdfTableOpts({startY:y,tableWidth:120,head:[["Session type","Number"]],body:SESSION_TYPES.map(t=>["Number of "+t+" sessions",String(sc[t]||0)]),columnStyles:{1:num}}));
-  y=doc.lastAutoTable.finalY+10;
+  y=doc.lastAutoTable.finalY+10;}
   const cross=(title,rows,fn)=>{
     y=pdfSection(doc,y,title+" and Actual Level of Supervision",14+rows.length*7);
     doc.autoTable(pdfTableOpts({startY:y,tableWidth:200,head:[["",...SUPERVISION,"Total"]],
@@ -805,9 +924,9 @@ async function pdfSummary(from,to){
 async function pdfCaseLog(list,label){
   await loadPdf();
   list=[...list].sort((a,b)=>(a.date+(a.start||"")).localeCompare(b.date+(b.start||"")));
-  const {doc}=pdfStart("Case log",`${label}  ·  ${list.length} case${list.length===1?"":"s"}`);
+  const st=pdfStart("Case log",`${label}  ·  ${list.length} case${list.length===1?"":"s"}`); const doc=st.doc;
   const other=(arr,o)=>(arr||[]).map(r=>r==="Other"&&o?"Other: "+o:r).join(", ");
-  doc.autoTable(pdfTableOpts({startY:30,
+  doc.autoTable(pdfTableOpts({startY:st.y,
     styles:{font:"helvetica",fontSize:7.2,cellPadding:1.4,lineColor:[216,230,229],lineWidth:.2,textColor:PDF_INK,valign:"top",overflow:"linebreak"},
     head:[["#","Date","Time","Hospital","Specialty","Operation","Age","ASA","Priority","Supervision","Supervisor","Primary mode","Regional","Procedures","Incidents"]],
     body:list.map((c,i)=>[String(i+1),fmtDate(c.date),(c.start||"")+(c.end?"–"+c.end:""),c.hospital||"",c.specialty||"",c.operation||"",ageText(c),(c.asa||"")+(c.asaE?"E":""),c.priority||"",c.supervision||"",c.supervisor||"",
@@ -827,9 +946,9 @@ const PDF_ICON='<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stro
 
 /* ---- Import / export ---- */
 const CSV_COLS=["date","start","end","hospital","specialty","operation","ageValue","ageUnit","ageBand","asa","asaE","priority","supervision","supervisor","teaching","primary","primaryOther","regional","regionalOther","procedures","proceduresOther","incidents","notes"];
-function toCSV(){
+function toCSV(list){
   const q=v=>{v=v==null?"":String(v);return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v};
-  return [CSV_COLS.join(","),...sortedCases().map(c=>CSV_COLS.map(k=>q(k==="ageBand"?ageBand(c):Array.isArray(c[k])?c[k].join("; "):typeof c[k]==="boolean"?(c[k]?"Y":""):c[k])).join(","))].join("\n");
+  return [CSV_COLS.join(","),...(list?[...list].sort((a,b)=>(b.date+(b.start||"")).localeCompare(a.date+(a.start||""))):sortedCases()).map(c=>CSV_COLS.map(k=>q(k==="ageBand"?ageBand(c):Array.isArray(c[k])?c[k].join("; "):typeof c[k]==="boolean"?(c[k]?"Y":""):c[k])).join(","))].join("\n");
 }
 async function dl(filename,data){
   if(!S.downloads){toast("Downloads aren't available here");return}
